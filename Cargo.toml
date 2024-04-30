@@ -1,0 +1,16 @@
+[package]
+name = "static-result-analyzer"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dev-dependencies]
+# These are included here purely for the IDE to recognize the libraries, they are not needed when building as they are part of the rust libraries.
+rustc_driver =    { path = "C:/Users/thomas/.rustup/toolchains/nightly-x86_64-pc-windows-msvc/lib/rustlib/rustc-src/rust/compiler/rustc_driver" }
+rustc_parse =     { path = "C:/Users/thomas/.rustup/toolchains/nightly-x86_64-pc-windows-msvc/lib/rustlib/rustc-src/rust/compiler/rustc_parse" }
+rustc_session =   { path = "C:/Users/thomas/.rustup/toolchains/nightly-x86_64-pc-windows-msvc/lib/rustlib/rustc-src/rust/compiler/rustc_session" }
+rustc_feature =   { path = "C:/Users/thomas/.rustup/toolchains/nightly-x86_64-pc-windows-msvc/lib/rustlib/rustc-src/rust/compiler/rustc_feature" }
+rustc_interface = { path = "C:/Users/thomas/.rustup/toolchains/nightly-x86_64-pc-windows-msvc/lib/rustlib/rustc-src/rust/compiler/rustc_interface" }
+rustc_hir =       { path = "C:/Users/thomas/.rustup/toolchains/nightly-x86_64-pc-windows-msvc/lib/rustlib/rustc-src/rust/compiler/rustc_hir" }
+rustc_middle =    { path = "C:/Users/thomas/.rustup/toolchains/nightly-x86_64-pc-windows-msvc/lib/rustlib/rustc-src/rust/compiler/rustc_middle" }
