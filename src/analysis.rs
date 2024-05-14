@@ -58,21 +58,27 @@ pub fn analyze(context: TyCtxt) -> Option<Graph> {
     None
 }
 
+/// Create a call graph starting from the provided root node.
 fn create_call_graph_from_root(context: TyCtxt, item: &Item) -> Graph {
     let mut graph = Graph::new();
 
+    // Access the function
     if let ItemKind::Fn(_sig, _gen, id) = item.kind {
+        // Create a node for the function
         let node = Node::new(id.hir_id, item.ident.as_str());
 
+        // Add edges/nodes for all functions called from within this function (and recursively do it for those functions as well)
         graph = add_calls_from_function(context, node, graph);
     }
 
     return graph;
 }
 
+/// Retrieve all function calls within a function, and add the nodes and edges to the graph.
 fn add_calls_from_function(context: TyCtxt, from: Node, mut graph: Graph) -> Graph {
     let node = context.hir_node(from.id());
 
+    // Access the code block of the function (might be wrapped in expr)
     match node {
         rustc_hir::Node::Expr(expr) => {
             if let ExprKind::Block(block, _) = expr.kind {
@@ -88,12 +94,16 @@ fn add_calls_from_function(context: TyCtxt, from: Node, mut graph: Graph) -> Gra
     return graph;
 }
 
+/// Retrieve all function calls within a block, and add the nodes and edges to the graph.
 fn add_calls_from_block(context: TyCtxt, from: Node, block: &Block, mut graph: Graph) -> Graph {
+    // Get the function calls from within this block
     let calls = get_function_calls_in_block(context, block);
 
+    // Add edges for all function calls
     for node in calls {
         graph.add_edge(Edge::new(&from, &node));
 
+        // If a called function has not been encountered before, recursively check add calls from function as well
         if graph.get_node(node.id()).is_none() {
             graph.add_node(node.clone());
 
@@ -108,7 +118,9 @@ fn add_calls_from_block(context: TyCtxt, from: Node, block: &Block, mut graph: G
 fn get_function_calls_in_block(context: TyCtxt, block: &Block) -> Vec<Node> {
     let mut res: Vec<Node> = vec![];
 
+    // Go over all statements in the block
     for statement in block.stmts {
+        // Match the kind of statement
         match statement.kind {
             StmtKind::Let(stmt) => {
                 if let Some(exp) = stmt.init {
@@ -133,6 +145,7 @@ fn get_function_calls_in_block(context: TyCtxt, block: &Block) -> Vec<Node> {
 /// Retrieve a vec of all function calls made within an expression.
 fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<Node> {
     let mut res: Vec<Node> = vec![];
+    // Match the kind of expression
     match expr.kind {
         ExprKind::ConstBlock(block) => {
             let node = context.hir_node(block.body.hir_id);
@@ -153,7 +166,7 @@ fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<Node> {
                                 let hir_id = context.local_def_id_to_hir_id(local_id);
                                 let item = context.hir_node(hir_id).expect_item();
                                 if let ItemKind::Fn(_sig, _gen, body) = item.kind {
-                                    res.push(Node::new(body.hir_id, &name(context, path.segments)))
+                                    res.push(Node::new(body.hir_id, &get_path_string(context, path.segments)))
                                 }
                             }
                         }
@@ -291,6 +304,7 @@ fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<Node> {
     res
 }
 
+/// Retrieve a vec of all function calls made from within a pattern.
 fn get_function_calls_in_pattern(context: TyCtxt, pat: &Pat) -> Vec<Node> {
     let mut res: Vec<Node> = vec![];
 
@@ -322,7 +336,8 @@ fn get_function_calls_in_pattern(context: TyCtxt, pat: &Pat) -> Vec<Node> {
     res
 }
 
-fn name(context: TyCtxt, segments: &[PathSegment]) -> String {
+/// Get a string of a path from its path segments, including the crate name (e.g. crate::main)
+fn get_path_string(context: TyCtxt, segments: &[PathSegment]) -> String {
     if segments.is_empty() {
         return String::new();
     }

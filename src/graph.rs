@@ -1,6 +1,6 @@
-use std::borrow::Cow;
 use dot::{Edges, Nodes};
 use rustc_hir::HirId;
+use std::borrow::Cow;
 
 #[derive(Debug, Clone)]
 pub struct Graph {
@@ -15,7 +15,9 @@ impl<'a> dot::Labeller<'a, Node, Edge> for Graph {
 
     fn node_id(&'a self, n: &Node) -> dot::Id<'a> {
         let mut id = n.id.to_string().replace(":", "_");
-        id.retain(|c| "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_".contains(c.clone()));
+        id.retain(|c| {
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_".contains(c.clone())
+        });
         dot::Id::new(id).unwrap()
     }
 
@@ -38,11 +40,15 @@ impl<'a> dot::GraphWalk<'a, Node, Edge> for Graph {
     }
 
     fn source(&'a self, edge: &Edge) -> Node {
-        self.get_node(edge.from).expect("Node from edge not added to nodes list!").clone()
+        self.get_node(edge.from)
+            .expect("Node from edge not added to nodes list!")
+            .clone()
     }
 
     fn target(&'a self, edge: &Edge) -> Node {
-        self.get_node(edge.to).expect("Node from edge not added to nodes list!").clone()
+        self.get_node(edge.to)
+            .expect("Node from edge not added to nodes list!")
+            .clone()
     }
 }
 
