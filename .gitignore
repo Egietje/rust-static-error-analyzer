@@ -3,3 +3,5 @@
 
 # Project files
 /.idea
+
+rustc-ice-*.txt
