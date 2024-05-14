@@ -14,3 +14,6 @@ rustc_feature =   { path = "C:/Users/thomas/.rustup/toolchains/nightly-x86_64-pc
 rustc_interface = { path = "C:/Users/thomas/.rustup/toolchains/nightly-x86_64-pc-windows-msvc/lib/rustlib/rustc-src/rust/compiler/rustc_interface" }
 rustc_hir =       { path = "C:/Users/thomas/.rustup/toolchains/nightly-x86_64-pc-windows-msvc/lib/rustlib/rustc-src/rust/compiler/rustc_hir" }
 rustc_middle =    { path = "C:/Users/thomas/.rustup/toolchains/nightly-x86_64-pc-windows-msvc/lib/rustlib/rustc-src/rust/compiler/rustc_middle" }
+
+[dependencies]
+dot = "0.1.4"
