@@ -44,13 +44,13 @@ pub fn analyze(context: TyCtxt) -> Option<Graph> {
         // Create call graph
         let graph = create_call_graph_from_root(context, item_node.expect_item());
 
-        // Attach return type info
+        // TODO: Attach return type info
 
-        // Error propagation chains
+        // TODO: Error propagation chains
 
-        // Attach panic info
+        // TODO: Attach panic info
 
-        // Remove redundant nodes
+        // TODO: Remove redundant nodes/edges
 
         return Some(graph);
     }
