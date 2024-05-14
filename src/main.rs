@@ -2,7 +2,6 @@
 
 mod analysis;
 mod graph;
-mod legacy;
 
 extern crate rustc_driver;
 extern crate rustc_hir;
