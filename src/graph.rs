@@ -14,7 +14,7 @@ impl<'a> dot::Labeller<'a, Node, Edge> for Graph {
     }
 
     fn node_id(&'a self, n: &Node) -> dot::Id<'a> {
-        let mut id = n.label.clone().replace(":", "_");
+        let mut id = n.id.to_string().replace(":", "_");
         id.retain(|c| "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_".contains(c.clone()));
         dot::Id::new(id).unwrap()
     }
