@@ -64,9 +64,9 @@ impl rustc_driver::Callbacks for AnalysisCallback {
         // Access type context
         queries.global_ctxt().unwrap().enter(|context| {
             // Analyze the type context
-            let graph = analysis::analyze(context);
+            let graph = analysis::analyze(context).expect("No graph was made!");
 
-            println!("{graph:?}");
+            println!("{}", graph.to_dot());
         });
 
         // No need to compile further
