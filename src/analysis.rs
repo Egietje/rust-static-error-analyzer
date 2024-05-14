@@ -25,37 +25,23 @@ use rustc_middle::ty::TyCtxt;
 ///
 /// Step 5: Remove functions that don't error/panic from graph
 pub fn analyze(context: TyCtxt) -> Option<Graph> {
-    // Get the crate's root node
-    let root_node = context.hir_node(CRATE_HIR_ID).expect_crate();
+    // Get the entry point of the program
+    let entry = context.entry_fn(())?;
+    let id = context.local_def_id_to_hir_id(entry.0.as_local()?);
+    let entry_node = context.hir_node(id);
 
-    // Go over all items defined in the crate's root
-    for item_id in root_node.item_ids {
-        // Get the node of each item
-        let item_node = context.hir_node(item_id.hir_id());
+    // Create call graph
+    let graph = create_call_graph_from_root(context, entry_node.expect_item());
 
-        // Start analyzing at the main function
-        if !item_node
-            .ident()
-            .is_some_and(|ident| ident.name.as_str().eq("main"))
-        {
-            continue;
-        }
+    // TODO: Attach return type info
 
-        // Create call graph
-        let graph = create_call_graph_from_root(context, item_node.expect_item());
+    // TODO: Error propagation chains
 
-        // TODO: Attach return type info
+    // TODO: Attach panic info
 
-        // TODO: Error propagation chains
+    // TODO: Remove redundant nodes/edges
 
-        // TODO: Attach panic info
-
-        // TODO: Remove redundant nodes/edges
-
-        return Some(graph);
-    }
-
-    None
+    Some(graph)
 }
 
 /// Create a call graph starting from the provided root node.
