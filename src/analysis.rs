@@ -5,25 +5,25 @@ use rustc_hir::{
 };
 use rustc_middle::ty::TyCtxt;
 
-// Analysis steps:
-
-// Step 1: Create call graph (directional)
-// Step 1.1: Node for each function (store def id and/or body id)
-// Step 1.2: Edge for each function call
-
-// Step 2: Attach return type info to functions in call graph (only if it's of type Result?)
-// Step 2.1: Loop over each function/node in call graph
-// Step 2.2: Label incoming edges of this node (e.g. calls to this function) with return type retrieved using def id
-
-// Step 3: Investigate functions that call error functions (whether it handles or propagates)
-// Step 3.1: Basic version: if calls error function and returns error, assume propagates
-// Step 3.2: Basic version: if calls error function and doesn't return error, assume handles
-// Step 3.3: Advanced version: not sure
-
-// Step 4: Attach panic info to functions in call graph
-
-// Step 5: Remove functions that don't error/panic from graph
-
+/// Analysis steps:
+///
+/// Step 1: Create call graph (directional)
+///
+/// Step 1.1: Node for each function (store def id and/or body id)
+/// Step 1.2: Edge for each function call
+///
+/// Step 2: Attach return type info to functions in call graph (only if it's of type Result?)
+/// Step 2.1: Loop over each function/node in call graph
+/// Step 2.2: Label incoming edges of this node (e.g. calls to this function) with return type retrieved using def id
+///
+/// Step 3: Investigate functions that call error functions (whether it handles or propagates)
+/// Step 3.1: Basic version: if calls error function and returns error, assume propagates
+/// Step 3.2: Basic version: if calls error function and doesn't return error, assume handles
+/// Step 3.3: Advanced version: not sure
+///
+/// Step 4: Attach panic info to functions in call graph
+///
+/// Step 5: Remove functions that don't error/panic from graph
 pub fn analyze(context: TyCtxt) -> Option<Graph> {
     // Get the crate's root node
     let root_node = context.hir_node(CRATE_HIR_ID).expect_crate();
