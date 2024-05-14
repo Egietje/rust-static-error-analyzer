@@ -1,6 +1,8 @@
 use crate::graph::{Edge, Graph, Node};
-use rustc_hir::{Item, ItemKind, CRATE_HIR_ID, StmtKind, Expr, ExprKind, Block, PatKind, Pat, QPath, HirId, OwnerId};
 use rustc_hir::def::{DefKind, Res};
+use rustc_hir::{
+    Block, Expr, ExprKind, Item, ItemKind, Pat, PatKind, PathSegment, QPath, StmtKind, CRATE_HIR_ID,
+};
 use rustc_middle::ty::TyCtxt;
 
 // Analysis steps:
@@ -69,7 +71,7 @@ fn create_call_graph_from_root(context: TyCtxt, item: &Item) -> Graph {
 }
 
 fn add_calls_from_function(context: TyCtxt, from: Node, mut graph: Graph) -> Graph {
-    let node  = context.hir_node(from.id());
+    let node = context.hir_node(from.id());
 
     match node {
         rustc_hir::Node::Expr(expr) => {
@@ -104,7 +106,7 @@ fn add_calls_from_block(context: TyCtxt, from: Node, block: &Block, mut graph: G
 
 /// Retrieve a vec of all function calls made within the body of a block.
 fn get_function_calls_in_block(context: TyCtxt, block: &Block) -> Vec<Node> {
-    let mut res: Vec<Node> = vec!();
+    let mut res: Vec<Node> = vec![];
 
     for statement in block.stmts {
         match statement.kind {
@@ -130,7 +132,7 @@ fn get_function_calls_in_block(context: TyCtxt, block: &Block) -> Vec<Node> {
 
 /// Retrieve a vec of all function calls made within an expression.
 fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<Node> {
-    let mut res: Vec<Node> = vec!();
+    let mut res: Vec<Node> = vec![];
     match expr.kind {
         ExprKind::ConstBlock(block) => {
             let node = context.hir_node(block.body.hir_id);
@@ -150,8 +152,8 @@ fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<Node> {
                             if let Some(local_id) = id.as_local() {
                                 let hir_id = context.local_def_id_to_hir_id(local_id);
                                 let item = context.hir_node(hir_id).expect_item();
-                                if let ItemKind::Fn(sig, gen, body) = item.kind {
-                                    res.push(Node::new(body.hir_id, path.segments.last().unwrap().ident.as_str()))
+                                if let ItemKind::Fn(_sig, _gen, body) = item.kind {
+                                    res.push(Node::new(body.hir_id, &name(context, path.segments)))
                                 }
                             }
                         }
@@ -290,7 +292,7 @@ fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<Node> {
 }
 
 fn get_function_calls_in_pattern(context: TyCtxt, pat: &Pat) -> Vec<Node> {
-    let mut res: Vec<Node> = vec!();
+    let mut res: Vec<Node> = vec![];
 
     match pat.kind {
         PatKind::Wild => {}
@@ -315,6 +317,30 @@ fn get_function_calls_in_pattern(context: TyCtxt, pat: &Pat) -> Vec<Node> {
         }
         PatKind::Slice(a, b, c) => {}
         PatKind::Err(_err) => {}
+    }
+
+    res
+}
+
+fn name(context: TyCtxt, segments: &[PathSegment]) -> String {
+    if segments.is_empty() {
+        return String::new();
+    }
+
+    let crate_num = segments
+        .first()
+        .unwrap()
+        .hir_id
+        .owner
+        .def_id
+        .to_def_id()
+        .krate;
+
+    let mut res = context.crate_name(crate_num).to_ident_string();
+
+    for segment in segments {
+        res.push_str("::");
+        res.push_str(segment.ident.name.as_str());
     }
 
     res

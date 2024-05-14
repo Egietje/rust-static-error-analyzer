@@ -51,8 +51,11 @@ impl Graph {
 }
 
 impl Node {
-    pub fn new(id: HirId, label: &str) -> Self{
-        Node { id, label: String::from(label) }
+    pub fn new(id: HirId, label: &str) -> Self {
+        Node {
+            id,
+            label: String::from(label),
+        }
     }
 
     pub fn id(&self) -> HirId {
@@ -74,7 +77,11 @@ impl PartialEq for Edge {
 
 impl Edge {
     pub fn new(from: &Node, to: &Node) -> Self {
-        Edge { from: from.id(), to: to.id(), label: String::new() }
+        Edge {
+            from: from.id(),
+            to: to.id(),
+            label: String::new(),
+        }
     }
 
     pub fn label(mut self, label: &str) {
