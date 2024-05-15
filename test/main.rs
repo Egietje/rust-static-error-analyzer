@@ -1,22 +1,21 @@
-mod test;
+mod mod1;
 
-use test::test as help;
+use mod1::fn3 as fn4;
 
 fn main() {
-    hello();
-    test();
-    hello();
+    fn2();
+    fn1();
+    fn1();
 }
 
-fn hello() {
-    println!("Hello!");
+fn fn1() {
     main();
-    help();
+    fn4();
 }
 
-fn test() {
-    test::test();
-    hello();
+fn fn2() {
+    mod1::fn3();
+    fn1();
     main();
 }
 

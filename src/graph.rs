@@ -41,13 +41,13 @@ impl<'a> dot::GraphWalk<'a, Node, Edge> for Graph {
 
     fn source(&'a self, edge: &Edge) -> Node {
         self.get_node(edge.from)
-            .expect("Node from edge not added to nodes list!")
+            .unwrap_or(&Node::new(edge.from, &edge.from.to_string()))
             .clone()
     }
 
     fn target(&'a self, edge: &Edge) -> Node {
         self.get_node(edge.to)
-            .expect("Node from edge not added to nodes list!")
+            .unwrap_or(&Node::new(edge.to, &edge.to.to_string()))
             .clone()
     }
 }

@@ -10,14 +10,29 @@ extern crate rustc_middle;
 extern crate rustc_parse;
 extern crate rustc_session;
 
+use std::path::Path;
+use cargo::{CargoResult, Config};
+use cargo::core::compiler::CompileMode;
+use cargo::core::Workspace;
+use cargo::ops::CompileOptions;
+
 /// Entry point, first sets up the compiler, and then runs it using the provided arguments.
-fn main() {
+fn main() -> CargoResult<()> {
+    /*
+    let config = Config::default()?;
+
+    let res = cargo::ops::compile(
+        &Workspace::new(Path::new("Cargo.toml"), &config)?,
+        &CompileOptions::new(&config, CompileMode::Build)?
+    )?;
+     */
+
     // Create a wrapper around an DiagCtxt that is used for early error emissions.
     let early_dcx =
         rustc_session::EarlyDiagCtxt::new(rustc_session::config::ErrorOutputType::default());
 
     // Gets (raw) command-line args
-    let args = rustc_driver::args::raw_args(&early_dcx)
+    let mut args = rustc_driver::args::raw_args(&early_dcx)
         .unwrap_or_else(|_| std::process::exit(rustc_driver::EXIT_FAILURE));
 
     // Enables CTRL + C
@@ -30,10 +45,25 @@ fn main() {
     // This allows tools to enable rust logging without having to magically match rustc’s tracing crate version.
     rustc_driver::init_rustc_env_logger(&early_dcx);
 
+    // TODO: auto detect these from running cargo build --verbose
+    args.push(String::from("--crate-name"));
+    args.push(String::from("test"));
+    args.push(String::from("-C"));
+    args.push(String::from("incremental=E:\\TCS\\Files\\Year 3\\Module 12\\static-result-analyzer\\target\\debug\\incremental"));
+    args.push(String::from("-L"));
+    args.push(String::from(
+        "dependency=E:\\TCS\\Files\\Year 3\\Module 12\\static-result-analyzer\\target\\debug\\deps",
+    ));
+    args.push(String::from("--extern"));
+    args.push(String::from("dot=E:\\TCS\\Files\\Year 3\\Module 12\\static-result-analyzer\\target\\debug\\deps\\libdot-ec52a93c80f22335.rlib"));
+    println!("{:?}", args);
+
     // Run the compiler using the command-line args.
     let exit_code = run_compiler(args, &mut AnalysisCallback, using_internal_features);
 
     println!("Ran compiler, exit code: {exit_code}");
+
+    Ok(())
 }
 
 /// Run a compiler with the provided (command-line) arguments and callbacks.

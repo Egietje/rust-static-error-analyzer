@@ -1,7 +1,7 @@
 use crate::graph::{Edge, Graph, Node};
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::{
-    Block, Expr, ExprKind, Item, ItemKind, Pat, PatKind, PathSegment, QPath, StmtKind, CRATE_HIR_ID,
+    Block, Expr, ExprKind, Item, ItemKind, Pat, PatKind, PathSegment, QPath, StmtKind, TyKind,
 };
 use rustc_middle::ty::TyCtxt;
 
@@ -82,6 +82,10 @@ fn add_calls_from_function(context: TyCtxt, from: Node, mut graph: Graph) -> Gra
 
 /// Retrieve all function calls within a block, and add the nodes and edges to the graph.
 fn add_calls_from_block(context: TyCtxt, from: Node, block: &Block, mut graph: Graph) -> Graph {
+    if graph.get_node(from.id()).is_none() {
+        graph.add_node(from.clone());
+    }
+
     // Get the function calls from within this block
     let calls = get_function_calls_in_block(context, block);
 
@@ -91,8 +95,6 @@ fn add_calls_from_block(context: TyCtxt, from: Node, block: &Block, mut graph: G
 
         // If a called function has not been encountered before, recursively check add calls from function as well
         if graph.get_node(node.id()).is_none() {
-            graph.add_node(node.clone());
-
             graph = add_calls_from_function(context, node, graph);
         }
     }
@@ -145,18 +147,8 @@ fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<Node> {
         ExprKind::Call(func, args) => {
             // TODO: verify this is correct/covers every case (probably not?)
             if let ExprKind::Path(qpath) = func.kind {
-                if let QPath::Resolved(_ty, path) = qpath {
-                    if let Res::Def(kind, id) = path.res {
-                        if let DefKind::Fn = kind {
-                            if let Some(local_id) = id.as_local() {
-                                let hir_id = context.local_def_id_to_hir_id(local_id);
-                                let item = context.hir_node(hir_id).expect_item();
-                                if let ItemKind::Fn(_sig, _gen, body) = item.kind {
-                                    res.push(Node::new(body.hir_id, &get_path_string(context, path.segments)))
-                                }
-                            }
-                        }
-                    }
+                if let Some(node) = get_node_from_path(context, qpath) {
+                    res.push(node);
                 }
             }
             for exp in args {
@@ -219,8 +211,8 @@ fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<Node> {
         }
         ExprKind::Closure(closure) => {
             // TODO verify this is correct
-            let block = context.hir_node(closure.body.hir_id).expect_block();
-            res.extend(get_function_calls_in_block(context, block));
+            let exp = context.hir_node(closure.body.hir_id).expect_expr();
+            res.extend(get_function_calls_in_expression(context, exp));
         }
         ExprKind::Block(block, _lbl) => {
             res.extend(get_function_calls_in_block(context, block));
@@ -320,6 +312,49 @@ fn get_function_calls_in_pattern(context: TyCtxt, pat: &Pat) -> Vec<Node> {
     }
 
     res
+}
+
+fn get_node_from_path(context: TyCtxt, qpath: QPath) -> Option<Node> {
+    match qpath {
+        QPath::Resolved(_ty, path) => {
+            if let Res::Def(kind, id) = path.res {
+                if let DefKind::Fn = kind {
+                    if let Some(local_id) = id.as_local() {
+                        let hir_id = context.local_def_id_to_hir_id(local_id);
+                        let item = context.hir_node(hir_id).expect_item();
+                        if let ItemKind::Fn(_sig, _gen, body) = item.kind {
+                            return Some(Node::new(
+                                body.hir_id,
+                                &get_path_string(context, path.segments),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        QPath::TypeRelative(ty, segment) => {
+            if let TyKind::Path(path) = ty.kind {
+                if let QPath::Resolved(_ty, pat) = path {
+                    if let Res::Def(_kind, id) = pat.res {
+                        println!("{:?}", id);
+                        if let Some(local_id) = id.as_local() {
+                            let hir_id = context.local_def_id_to_hir_id(local_id);
+                            let item = context.hir_node(hir_id).expect_item();
+                            if let ItemKind::Fn(_sig, _gen, body) = item.kind {
+                                let mut path_string = get_path_string(context, pat.segments);
+                                path_string.push_str("::");
+                                path_string.push_str(segment.ident.as_str());
+                                return Some(Node::new(body.hir_id, &path_string));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        QPath::LangItem(_, _) => {}
+    }
+
+    None
 }
 
 /// Get a string of a path from its path segments, including the crate name (e.g. crate::main)
