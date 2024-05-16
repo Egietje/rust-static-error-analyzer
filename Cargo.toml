@@ -17,4 +17,4 @@ rustc_middle =    { path = "C:/Users/thomas/.rustup/toolchains/nightly-x86_64-pc
 
 [dependencies]
 dot = "0.1.4"
-cargo = "*"
+cargo-options = "*"

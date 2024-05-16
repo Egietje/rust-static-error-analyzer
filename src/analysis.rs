@@ -11,6 +11,7 @@ use rustc_middle::ty::TyCtxt;
 ///
 /// Step 1.1: Node for each function (store def id and/or body id)
 /// Step 1.2: Edge for each function call
+/// Step 1.3: Look into how concurrency plays into all this
 ///
 /// Step 2: Attach return type info to functions in call graph (only if it's of type Result?)
 /// Step 2.1: Loop over each function/node in call graph

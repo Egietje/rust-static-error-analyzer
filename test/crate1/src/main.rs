@@ -3,7 +3,6 @@ mod mod1;
 use mod1::fn3 as fn4;
 
 fn main() {
-    fn2();
     fn1();
     fn1();
 }
