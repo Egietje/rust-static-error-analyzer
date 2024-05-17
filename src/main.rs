@@ -108,8 +108,11 @@ fn get_cargo_build_rustc_invocation(manifest_path: PathBuf) -> Option<String> {
     println!("Cleaning package...");
     let mut clean_command = std::process::Command::new("cargo");
     clean_command.arg("clean");
-    clean_command.arg("-p");
-    clean_command.arg("static-result-analyzer");
+    //clean_command.arg("-p");
+    //clean_command.arg("crate1");
+
+    clean_command.current_dir(manifest_path.parent().expect("Could not get manifest directory!"));
+
     let _clean_out = clean_command.output().expect("Could not clean!");
 
     // TODO: interrupt build as to not compile the program twice
