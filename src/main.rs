@@ -11,6 +11,7 @@ extern crate rustc_parse;
 extern crate rustc_session;
 
 use std::path::PathBuf;
+use toml::Table;
 
 /// Entry point, first sets up the compiler, and then runs it using the provided arguments.
 fn main() {
@@ -116,18 +117,26 @@ fn split_args(relative_manifest_path: &str, command: String) -> Vec<String> {
 }
 
 fn cargo_clean(manifest_path: &PathBuf) -> String {
-    // TODO: auto clean proper package
     println!("Cleaning package...");
     let mut clean_command = std::process::Command::new("cargo");
     clean_command.arg("clean");
-    //clean_command.arg("-p");
-    //clean_command.arg("crate1");
+    clean_command.arg("-p");
+    clean_command.arg(get_package_name(manifest_path));
 
     clean_command.current_dir(manifest_path.parent().expect("Could not get manifest directory!"));
 
     let output = clean_command.output().expect("Could not clean!");
 
     String::from_utf8(output.stderr).expect("Invalid UTF8!")
+}
+
+fn get_package_name(manifest_path: &PathBuf) -> String {
+    let file = std::fs::read(manifest_path).expect("Could not read manifest!");
+    let content = String::from_utf8(file).expect("Invalid UTF8!");
+    let table = content.parse::<Table>().expect("Could not parse manifest as TOML!");
+    let package_table = table["package"].as_table().expect("No package info found in manifest!");
+    let package_name = package_table["name"].as_str().expect("No name found in package information!").to_owned();
+    return package_name;
 }
 
 fn cargo_build_verbose(manifest_path: &PathBuf) -> String {
@@ -138,6 +147,7 @@ fn cargo_build_verbose(manifest_path: &PathBuf) -> String {
     build_command.arg("-vv");
     build_command.arg("--manifest-path");
     build_command.arg(manifest_path.as_os_str());
+
     let output = build_command.output().expect("Could not build!");
 
     String::from_utf8(output.stderr).expect("Invalid UTF8!")
