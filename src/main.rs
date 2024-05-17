@@ -26,7 +26,7 @@ fn main() {
 
     let manifest_path = get_manifest_path(&cargo_path);
 
-    let compiler_args = get_compiler_args(&cargo_path, manifest_path).expect("Could not get arguments from cargo build!");
+    let compiler_args = get_compiler_args(&cargo_path, &manifest_path).expect("Could not get arguments from cargo build!");
 
     // Enables CTRL + C
     rustc_driver::install_ctrlc_handler();
@@ -61,9 +61,17 @@ fn get_relative_manifest_path<'a>(args: Vec<String>) -> String {
     }
 }
 
-fn get_compiler_args(relative_manifest_path: &str, manifest_path: PathBuf) -> Option<Vec<String>> {
-    let command = get_cargo_build_rustc_invocation(manifest_path)?.trim_end_matches('`').to_string();
+fn get_compiler_args(relative_manifest_path: &str, manifest_path: &PathBuf) -> Option<Vec<String>> {
+    cargo_clean(manifest_path);
 
+    let build_output = cargo_build_verbose(&manifest_path);
+
+    let command = get_rustc_invocation(&build_output)?;
+
+    Some(split_args(relative_manifest_path, command))
+}
+
+fn split_args(relative_manifest_path: &str, command: String) -> Vec<String> {
     let mut res = vec![];
     let mut temp = String::new();
 
@@ -91,7 +99,11 @@ fn get_compiler_args(relative_manifest_path: &str, manifest_path: PathBuf) -> Op
         }
     }
 
-    for i in 0..res.len() - 1 {
+    // Overwrite error format args
+    for i in 0..res.len() {
+        if i >= res.len() {
+            break;
+        }
         if res[i].starts_with("--error-format=") {
             res[i] = String::from("--error-format=short");
         }
@@ -100,10 +112,10 @@ fn get_compiler_args(relative_manifest_path: &str, manifest_path: PathBuf) -> Op
         }
     }
 
-    Some(res)
+    res
 }
 
-fn get_cargo_build_rustc_invocation(manifest_path: PathBuf) -> Option<String> {
+fn cargo_clean(manifest_path: &PathBuf) -> String {
     // TODO: auto clean proper package
     println!("Cleaning package...");
     let mut clean_command = std::process::Command::new("cargo");
@@ -113,8 +125,12 @@ fn get_cargo_build_rustc_invocation(manifest_path: PathBuf) -> Option<String> {
 
     clean_command.current_dir(manifest_path.parent().expect("Could not get manifest directory!"));
 
-    let _clean_out = clean_command.output().expect("Could not clean!");
+    let output = clean_command.output().expect("Could not clean!");
 
+    String::from_utf8(output.stderr).expect("Invalid UTF8!")
+}
+
+fn cargo_build_verbose(manifest_path: &PathBuf) -> String {
     // TODO: interrupt build as to not compile the program twice
     println!("Building package...");
     let mut build_command = std::process::Command::new("cargo");
@@ -124,12 +140,14 @@ fn get_cargo_build_rustc_invocation(manifest_path: PathBuf) -> Option<String> {
     build_command.arg(manifest_path.as_os_str());
     let output = build_command.output().expect("Could not build!");
 
-    let stderr = String::from_utf8(output.stderr).expect("Invalid UTF8!");
+    String::from_utf8(output.stderr).expect("Invalid UTF8!")
+}
 
-    for line in stderr.split("\n") {
+fn get_rustc_invocation(build_output: &str) -> Option<String> {
+    for line in build_output.split("\n") {
         for command in line.split("&& ") {
             if command.contains("rustc") && command.contains("--crate-type bin") && command.contains("main.rs") {
-                return Some(String::from(command));
+                return Some(String::from(command.trim_end_matches('`')));
             }
         }
     }
