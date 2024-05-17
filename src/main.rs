@@ -116,7 +116,6 @@ fn get_cargo_build_rustc_invocation(manifest_path: PathBuf) -> Option<String> {
 
     for line in stderr.split("\n") {
         for command in line.split("&& ") {
-            println!("{command}");
             if command.contains("rustc") && command.contains("--crate-type bin") && command.contains("main.rs") {
                 return Some(String::from(command));
             }
