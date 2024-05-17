@@ -91,6 +91,15 @@ fn get_compiler_args(relative_manifest_path: &str, manifest_path: PathBuf) -> Op
         }
     }
 
+    for i in 0..res.len() - 1 {
+        if res[i].starts_with("--error-format=") {
+            res[i] = String::from("--error-format=short");
+        }
+        if res[i].starts_with("--json=") {
+            res.remove(i);
+        }
+    }
+
     Some(res)
 }
 
@@ -152,9 +161,12 @@ impl rustc_driver::Callbacks for AnalysisCallback {
     ) -> rustc_driver::Compilation {
         // Access type context
         queries.global_ctxt().unwrap().enter(|context| {
+            println!("Analyzing output...");
             // Analyze the type context
             let graph = analysis::analyze(context).expect("No graph was made!");
 
+            println!("Done!");
+            println!();
             println!("{}", graph.to_dot());
         });
 
