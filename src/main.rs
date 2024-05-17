@@ -11,7 +11,6 @@ extern crate rustc_parse;
 extern crate rustc_session;
 
 use std::path::PathBuf;
-use cargo_options::CommonOptions;
 
 /// Entry point, first sets up the compiler, and then runs it using the provided arguments.
 fn main() {
@@ -23,9 +22,11 @@ fn main() {
     let args = rustc_driver::args::raw_args(&early_dcx)
         .unwrap_or_else(|_| std::process::exit(rustc_driver::EXIT_FAILURE));
 
-    let manifest_path = get_manifest_path(args);
+    let cargo_path = get_relative_manifest_path(args);
 
-    let compiler_args = get_compiler_args(manifest_path).expect("Could not get arguments from cargo build!");
+    let manifest_path = get_manifest_path(&cargo_path);
+
+    let compiler_args = get_compiler_args(&cargo_path, manifest_path).expect("Could not get arguments from cargo build!");
 
     // Enables CTRL + C
     rustc_driver::install_ctrlc_handler();
@@ -37,93 +38,91 @@ fn main() {
     // This allows tools to enable rust logging without having to magically match rustc’s tracing crate version.
     rustc_driver::init_rustc_env_logger(&early_dcx);
 
-    println!("{:?}", compiler_args);
-
     // Run the compiler using the retrieved args.
     let exit_code = run_compiler(compiler_args, &mut AnalysisCallback, using_internal_features);
 
     println!("Ran compiler, exit code: {exit_code}");
 }
 
-fn get_manifest_path(args: Vec<String>) -> PathBuf {
-    let mut manifest_path = std::env::current_dir().unwrap();
+fn get_manifest_path(cargo_path: &str) -> PathBuf {
+    return std::env::current_dir().unwrap().join(cargo_path);
+}
+
+fn get_relative_manifest_path<'a>(args: Vec<String>) -> String {
     if args.len() < 2 {
-        manifest_path = manifest_path.join("Cargo.toml");
+        String::from("Cargo.toml")
     } else {
         let arg = args.get(1).unwrap();
         if arg.ends_with("Cargo.toml") {
-            manifest_path = manifest_path.join(arg);
+            arg.clone()
         } else {
-            manifest_path = manifest_path.join("Cargo.toml");
+            String::from("Cargo.toml")
         }
     }
-    return manifest_path;
 }
 
-fn get_compiler_args(manifest_path: PathBuf) -> Option<Vec<String>> {
+fn get_compiler_args(relative_manifest_path: &str, manifest_path: PathBuf) -> Option<Vec<String>> {
     let command = get_cargo_build_rustc_invocation(manifest_path)?.trim_end_matches('`').to_string();
 
     let mut res = vec![];
-    // Split on ' ', but leave ' ' when enclosed in '"'
     let mut temp = String::new();
-    let mut first = true;
+
+    // Split on ' '
     for arg in command.split(' ') {
-        if first {
-            first = false;
-            continue;
+        let mut arg = arg.to_owned();
+
+        // If this is the path to main.rs, prepend the relative path to the manifest, stripping away Cargo.toml
+        if arg.contains("main.rs") {
+            let mut new_arg = String::from(relative_manifest_path.trim_end_matches("Cargo.toml"));
+            new_arg.push_str(&arg);
+            arg = new_arg;
         }
-        if arg.starts_with('"') {
+
+        // Leave ' ' when enclosed in '"', removing the enclosing '"'
+        if arg.ends_with('"') {
+            temp.push_str(arg.trim_end_matches('"'));
+            res.push(temp);
             temp = String::new();
-            temp.push_str(arg);
+        } else if arg.starts_with('"') || !temp.is_empty() {
+            temp.push_str(arg.trim_start_matches('"'));
             temp.push(' ');
-        } else if arg.ends_with('"') {
-            temp.push_str(arg);
-            res.push(temp.clone());
         } else {
-            res.push(String::from(arg));
+            res.push(arg);
         }
     }
+
     Some(res)
 }
 
 fn get_cargo_build_rustc_invocation(manifest_path: PathBuf) -> Option<String> {
-    let mut options = CommonOptions::default();
-    options.verbose = 2;
+    // TODO: auto clean proper package
+    println!("Cleaning package...");
+    let mut clean_command = std::process::Command::new("cargo");
+    clean_command.arg("clean");
+    clean_command.arg("-p");
+    clean_command.arg("static-result-analyzer");
+    let _clean_out = clean_command.output().expect("Could not clean!");
 
-    let build = cargo_options::Build {
-        common: options,
-        manifest_path: Some(manifest_path),
-        release: false,
-        ignore_rust_version: false,
-        unit_graph: false,
-        packages: vec![],
-        workspace: false,
-        exclude: vec![],
-        all: false,
-        lib: false,
-        bin: vec![],
-        bins: false,
-        example: vec![],
-        examples: false,
-        test: vec![],
-        tests: false,
-        bench: vec![],
-        benches: false,
-        all_targets: true,
-        out_dir: None,
-        build_plan: false,
-        future_incompat_report: false,
-    };
-    let mut command = cargo_options::Build::command(&build);
-    let output = command.output().expect("Could not build!");
-    let stderr_output = String::from_utf8(output.stderr).expect("Invalid UTF8!");
-    for line in stderr_output.split("\n") {
+    // TODO: interrupt build as to not compile the program twice
+    println!("Building package...");
+    let mut build_command = std::process::Command::new("cargo");
+    build_command.arg("build");
+    build_command.arg("-vv");
+    build_command.arg("--manifest-path");
+    build_command.arg(manifest_path.as_os_str());
+    let output = build_command.output().expect("Could not build!");
+
+    let stderr = String::from_utf8(output.stderr).expect("Invalid UTF8!");
+
+    for line in stderr.split("\n") {
         for command in line.split("&& ") {
-            if command.contains("rustc") {
+            println!("{command}");
+            if command.contains("rustc") && command.contains("--crate-type bin") && command.contains("main.rs") {
                 return Some(String::from(command));
             }
         }
     }
+
     return None;
 }
 
@@ -134,7 +133,7 @@ fn run_compiler(
     callbacks: &mut (dyn rustc_driver::Callbacks + Send),
     using_internal_features: std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) -> i32 {
-    println!("Running compiler.");
+    println!("Running compiler...");
 
     // Invoke compiler, and return the exit code
     rustc_driver::catch_with_exit_code(move || {

@@ -4,6 +4,7 @@ use mod1::fn3 as fn4;
 
 fn main() {
     fn1();
+    fn2();
     fn1();
 }
 
