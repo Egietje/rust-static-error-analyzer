@@ -156,8 +156,9 @@ fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<Node> {
                 res.extend(get_function_calls_in_expression(context, exp));
             }
         }
-        ExprKind::MethodCall(path, method, args, span) => {
-            // TODO: add node
+        ExprKind::MethodCall(_path, expr, args, _span) => {
+            // TODO: method call itself from path
+            res.extend(get_function_calls_in_expression(context, expr));
             for exp in args {
                 res.extend(get_function_calls_in_expression(context, exp));
             }
@@ -337,7 +338,6 @@ fn get_node_from_path(context: TyCtxt, qpath: QPath) -> Option<Node> {
             if let TyKind::Path(path) = ty.kind {
                 if let QPath::Resolved(_ty, pat) = path {
                     if let Res::Def(_kind, id) = pat.res {
-                        println!("{:?}", id);
                         if let Some(local_id) = id.as_local() {
                             let hir_id = context.local_def_id_to_hir_id(local_id);
                             let item = context.hir_node(hir_id).expect_item();
