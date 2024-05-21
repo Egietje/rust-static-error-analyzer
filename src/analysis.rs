@@ -179,9 +179,11 @@ fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<NodeKin
                 res.extend(get_function_calls_in_expression(context, exp));
             }
         }
-        ExprKind::MethodCall(_path, expr, args, _span) => {
-            // TODO: method call itself from path
-            res.extend(get_function_calls_in_expression(context, expr));
+        ExprKind::MethodCall(_path, exp, args, _span) => {
+            if let Some(def_id) = context.typeck(expr.hir_id.owner.def_id).type_dependent_def_id(expr.hir_id) {
+                res.push(NodeKind::non_local_fn(def_id));
+            }
+            res.extend(get_function_calls_in_expression(context, exp));
             for exp in args {
                 res.extend(get_function_calls_in_expression(context, exp));
             }

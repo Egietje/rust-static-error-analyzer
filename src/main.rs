@@ -19,20 +19,21 @@ fn main() {
     let early_dcx =
         rustc_session::EarlyDiagCtxt::new(rustc_session::config::ErrorOutputType::default());
 
-    // Gets (raw) command-line args
+    // Get command-line args
     let args = rustc_driver::args::raw_args(&early_dcx)
         .unwrap_or_else(|_| std::process::exit(rustc_driver::EXIT_FAILURE));
 
+    // Get the path to Cargo.toml
     let cargo_path = get_relative_manifest_path(args);
-
     let manifest_path = get_manifest_path(&cargo_path);
 
+    // Extract the compiler arguments from running `cargo build`
     let compiler_args = get_compiler_args(&cargo_path, &manifest_path).expect("Could not get arguments from cargo build!");
 
-    // Enables CTRL + C
+    // Enable CTRL + C
     rustc_driver::install_ctrlc_handler();
 
-    // Installs a panic hook that will print the ICE message on unexpected panics.
+    // Install a panic hook that will print the ICE message on unexpected panics.
     let using_internal_features =
         rustc_driver::install_ice_hook(rustc_driver::DEFAULT_BUG_REPORT_URL, |_| ());
 
@@ -165,7 +166,7 @@ fn get_rustc_invocation(build_output: &str) -> Option<String> {
     return None;
 }
 
-/// Run a compiler with the provided (command-line) arguments and callbacks.
+/// Run a compiler with the provided arguments and callbacks.
 /// Returns the exit code of the compiler.
 fn run_compiler(
     args: Vec<String>,
