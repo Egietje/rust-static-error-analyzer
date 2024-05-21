@@ -1,12 +1,15 @@
 mod mod1;
 
 use mod1::fn3 as fn4;
+use std::thread::spawn;
 
 fn main() {
     fn1();
     fn2();
-    fn1();
-    res().unwrap();
+
+    let handle = spawn(res);
+    let res = handle.join();
+    res.unwrap().unwrap();
 }
 
 fn fn1() {

@@ -1,14 +1,14 @@
-use crate::graph::{Edge, Graph, Node};
+use crate::graph::{Edge, Graph, Node, NodeKind};
 use rustc_hir::def::{DefKind, Res};
-use rustc_hir::{
-    Block, Expr, ExprKind, Item, ItemKind, Pat, PatKind, PathSegment, QPath, StmtKind, TyKind,
-};
+use rustc_hir::{Block, Expr, ExprKind, Item, ItemKind, Pat, PatKind, PathSegment, QPath, StmtKind, TyKind, HirId};
+use rustc_hir::def_id::DefId;
+use rustc_middle::hir::map::Map;
+use rustc_middle::query::Key;
 use rustc_middle::ty::TyCtxt;
 
 /// Analysis steps:
 ///
 /// Step 1: Create call graph (directional)
-///
 /// Step 1.1: Node for each function (store def id and/or body id)
 /// Step 1.2: Edge for each function call
 /// Step 1.3: Look into how concurrency plays into all this
@@ -27,8 +27,8 @@ use rustc_middle::ty::TyCtxt;
 /// Step 5: Remove functions that don't error/panic from graph
 pub fn analyze(context: TyCtxt) -> Option<Graph> {
     // Get the entry point of the program
-    let entry = context.entry_fn(())?;
-    let id = context.local_def_id_to_hir_id(entry.0.as_local()?);
+    let (def_id, entry_type) = context.entry_fn(())?;
+    let id = context.local_def_id_to_hir_id(def_id.as_local()?);
     let entry_node = context.hir_node(id);
 
     // Create call graph
@@ -52,28 +52,29 @@ fn create_call_graph_from_root(context: TyCtxt, item: &Item) -> Graph {
     // Access the function
     if let ItemKind::Fn(_sig, _gen, id) = item.kind {
         // Create a node for the function
-        let node = Node::new(id.hir_id, item.ident.as_str());
+        let node = NodeKind::local_fn(id.hir_id);
+        let node_id = graph.add_node(&get_full_name(context, &node), node);
 
         // Add edges/nodes for all functions called from within this function (and recursively do it for those functions as well)
-        graph = add_calls_from_function(context, node, graph);
+        graph = add_calls_from_function(context, node_id, id.hir_id, graph);
     }
 
     return graph;
 }
 
 /// Retrieve all function calls within a function, and add the nodes and edges to the graph.
-fn add_calls_from_function(context: TyCtxt, from: Node, mut graph: Graph) -> Graph {
-    let node = context.hir_node(from.id());
+fn add_calls_from_function(context: TyCtxt, from_node: usize, fn_id: HirId, mut graph: Graph) -> Graph {
+    let node = context.hir_node(fn_id);
 
     // Access the code block of the function (might be wrapped in expr)
     match node {
         rustc_hir::Node::Expr(expr) => {
             if let ExprKind::Block(block, _) = expr.kind {
-                graph = add_calls_from_block(context, from, block, graph);
+                graph = add_calls_from_block(context, from_node, block, graph);
             }
         }
         rustc_hir::Node::Block(block) => {
-            graph = add_calls_from_block(context, from, block, graph);
+            graph = add_calls_from_block(context, from_node, block, graph);
         }
         _ => {}
     }
@@ -82,21 +83,38 @@ fn add_calls_from_function(context: TyCtxt, from: Node, mut graph: Graph) -> Gra
 }
 
 /// Retrieve all function calls within a block, and add the nodes and edges to the graph.
-fn add_calls_from_block(context: TyCtxt, from: Node, block: &Block, mut graph: Graph) -> Graph {
-    if graph.get_node(from.id()).is_none() {
-        graph.add_node(from.clone());
-    }
-
+fn add_calls_from_block(context: TyCtxt, from: usize, block: &Block, mut graph: Graph) -> Graph {
     // Get the function calls from within this block
     let calls = get_function_calls_in_block(context, block);
 
     // Add edges for all function calls
-    for node in calls {
-        graph.add_edge(Edge::new(&from, &node));
+    for node_kind in calls {
+        match node_kind {
+            NodeKind::LocalFn { hir_id } => {
+                if let Some(node) = graph.find_local_fn_node(hir_id) {
+                    // We have already encountered this local function, so just add the edge
+                    graph.add_edge(Edge::new(from, node.id()));
+                } else {
+                    // We have not yet explored this local function, so add new node and edge,
+                    // and explore it
+                    let id = graph.add_node(&get_full_name(context, &node_kind), node_kind);
 
-        // If a called function has not been encountered before, recursively check add calls from function as well
-        if graph.get_node(node.id()).is_none() {
-            graph = add_calls_from_function(context, node, graph);
+                    graph.add_edge(Edge::new(from, id));
+
+                    graph = add_calls_from_function(context, id, hir_id, graph);
+                }
+            }
+            NodeKind::NonLocalFn { def_id } => {
+                if let Some(node) = graph.find_non_local_fn_node(def_id) {
+                    // We have already encountered this non-local function, so just add the edge
+                    graph.add_edge(Edge::new(from, node.id()));
+                } else {
+                    // We have not yet explored this non-local function, so add new node and edge
+                    let id = graph.add_node(&get_full_name(context, &node_kind), node_kind);
+
+                    graph.add_edge(Edge::new(from, id));
+                }
+            }
         }
     }
 
@@ -104,8 +122,13 @@ fn add_calls_from_block(context: TyCtxt, from: Node, block: &Block, mut graph: G
 }
 
 /// Retrieve a vec of all function calls made within the body of a block.
-fn get_function_calls_in_block(context: TyCtxt, block: &Block) -> Vec<Node> {
-    let mut res: Vec<Node> = vec![];
+fn get_function_calls_in_block(context: TyCtxt, block: &Block) -> Vec<NodeKind> {
+    let mut res: Vec<NodeKind> = vec![];
+
+    // If the block has an ending expression add calls from there
+    if let Some(exp) = block.expr {
+        res.extend(get_function_calls_in_expression(context, exp));
+    }
 
     // Go over all statements in the block
     for statement in block.stmts {
@@ -132,8 +155,8 @@ fn get_function_calls_in_block(context: TyCtxt, block: &Block) -> Vec<Node> {
 }
 
 /// Retrieve a vec of all function calls made within an expression.
-fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<Node> {
-    let mut res: Vec<Node> = vec![];
+fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<NodeKind> {
+    let mut res: Vec<NodeKind> = vec![];
     // Match the kind of expression
     match expr.kind {
         ExprKind::ConstBlock(block) => {
@@ -148,7 +171,7 @@ fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<Node> {
         ExprKind::Call(func, args) => {
             // TODO: verify this is correct/covers every case (probably not?)
             if let ExprKind::Path(qpath) = func.kind {
-                if let Some(node) = get_node_from_path(context, qpath) {
+                if let Some(node) = get_node_kind_from_path(context, qpath) {
                     res.push(node);
                 }
             }
@@ -213,7 +236,9 @@ fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<Node> {
         }
         ExprKind::Closure(closure) => {
             // TODO verify this is correct
+            println!("{:?}", closure);
             let exp = context.hir_node(closure.body.hir_id).expect_expr();
+            println!("{:?}", exp);
             res.extend(get_function_calls_in_expression(context, exp));
         }
         ExprKind::Block(block, _lbl) => {
@@ -285,8 +310,8 @@ fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<Node> {
 }
 
 /// Retrieve a vec of all function calls made from within a pattern.
-fn get_function_calls_in_pattern(context: TyCtxt, pat: &Pat) -> Vec<Node> {
-    let mut res: Vec<Node> = vec![];
+fn get_function_calls_in_pattern(context: TyCtxt, pat: &Pat) -> Vec<NodeKind> {
+    let mut res: Vec<NodeKind> = vec![];
 
     match pat.kind {
         PatKind::Wild => {}
@@ -316,20 +341,21 @@ fn get_function_calls_in_pattern(context: TyCtxt, pat: &Pat) -> Vec<Node> {
     res
 }
 
-fn get_node_from_path(context: TyCtxt, qpath: QPath) -> Option<Node> {
+fn get_node_kind_from_path(context: TyCtxt, qpath: QPath) -> Option<NodeKind> {
     match qpath {
         QPath::Resolved(_ty, path) => {
             if let Res::Def(kind, id) = path.res {
                 if let DefKind::Fn = kind {
                     if let Some(local_id) = id.as_local() {
+                        // Local function
                         let hir_id = context.local_def_id_to_hir_id(local_id);
                         let item = context.hir_node(hir_id).expect_item();
                         if let ItemKind::Fn(_sig, _gen, body) = item.kind {
-                            return Some(Node::new(
-                                body.hir_id,
-                                &get_path_string(context, path.segments),
-                            ));
+                            return Some(NodeKind::local_fn(body.hir_id));
                         }
+                    } else {
+                        // Non-local function
+                        return Some(NodeKind::non_local_fn(id));
                     }
                 }
             }
@@ -342,10 +368,7 @@ fn get_node_from_path(context: TyCtxt, qpath: QPath) -> Option<Node> {
                             let hir_id = context.local_def_id_to_hir_id(local_id);
                             let item = context.hir_node(hir_id).expect_item();
                             if let ItemKind::Fn(_sig, _gen, body) = item.kind {
-                                let mut path_string = get_path_string(context, pat.segments);
-                                path_string.push_str("::");
-                                path_string.push_str(segment.ident.as_str());
-                                return Some(Node::new(body.hir_id, &path_string));
+                                return Some(NodeKind::local_fn(body.hir_id));
                             }
                         }
                     }
@@ -359,26 +382,47 @@ fn get_node_from_path(context: TyCtxt, qpath: QPath) -> Option<Node> {
 }
 
 /// Get a string of a path from its path segments, including the crate name (e.g. crate::main)
-fn get_path_string(context: TyCtxt, segments: &[PathSegment]) -> String {
-    if segments.is_empty() {
-        return String::new();
+fn get_full_name(context: TyCtxt, node_kind: &NodeKind) -> String {
+    match node_kind {
+        NodeKind::LocalFn { hir_id } => {
+            get_fn_path(context, hir_id.owner.def_id.to_def_id())
+        }
+        NodeKind::NonLocalFn { def_id } => {
+            get_fn_path(context, def_id.clone())
+        }
     }
+}
 
-    let crate_num = segments
-        .first()
-        .unwrap()
-        .hir_id
-        .owner
-        .def_id
-        .to_def_id()
-        .krate;
+fn get_fn_path(context: TyCtxt, def_id: DefId) -> String {
+    let path: Vec<String> = get_fn_path_rec(context, def_id).into_iter().rev().collect();
 
-    let mut res = context.crate_name(crate_num).to_ident_string();
+    let mut res = String::new();
 
-    for segment in segments {
-        res.push_str("::");
-        res.push_str(segment.ident.name.as_str());
+    for i in 0..path.len() {
+        res.push_str(&path[i]);
+        if i != path.len() - 1 {
+            res.push_str("::");
+        }
     }
 
     res
+}
+
+fn get_fn_path_rec(context: TyCtxt, def_id: DefId) -> Vec<String> {
+    let mut res = Vec::new();
+
+    let ident = get_identifier(context, def_id);
+    if let Some(id) = ident {
+        res.push(id);
+    }
+
+    if let Some(parent) = context.opt_parent(def_id) {
+        res.extend(get_fn_path_rec(context, parent));
+    }
+
+    res
+}
+
+fn get_identifier(context: TyCtxt, def_id: DefId) -> Option<String> {
+    context.opt_item_name(def_id).map(|s| s.to_ident_string())
 }

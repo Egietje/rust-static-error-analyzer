@@ -1,6 +1,8 @@
 use dot::{Edges, Nodes};
 use rustc_hir::HirId;
+use rustc_hir::def_id::DefId;
 use std::borrow::Cow;
+use std::cmp::PartialEq;
 
 #[derive(Debug, Clone)]
 pub struct Graph {
@@ -14,11 +16,7 @@ impl<'a> dot::Labeller<'a, Node, Edge> for Graph {
     }
 
     fn node_id(&'a self, n: &Node) -> dot::Id<'a> {
-        let mut id = n.id.to_string().replace(":", "_");
-        id.retain(|c| {
-            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_".contains(c.clone())
-        });
-        dot::Id::new(id).unwrap()
+        dot::Id::new(format!("node{:?}", n.id)).unwrap()
     }
 
     fn node_label(&'a self, n: &Node) -> dot::LabelText<'a> {
@@ -41,27 +39,38 @@ impl<'a> dot::GraphWalk<'a, Node, Edge> for Graph {
 
     fn source(&'a self, edge: &Edge) -> Node {
         self.get_node(edge.from)
-            .unwrap_or(&Node::new(edge.from, &edge.from.to_string()))
+            .expect("Node at edge's start does not exist!")
             .clone()
     }
 
     fn target(&'a self, edge: &Edge) -> Node {
         self.get_node(edge.to)
-            .unwrap_or(&Node::new(edge.to, &edge.to.to_string()))
+            .expect("Node at edge's end does not exist!")
             .clone()
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Node {
-    id: HirId,
-    label: String,
+    pub id: usize,
+    pub label: String,
+    pub kind: NodeKind,
+}
+
+#[derive(Debug, Clone)]
+pub enum NodeKind {
+    LocalFn {
+        hir_id: HirId,
+    },
+    NonLocalFn {
+        def_id: DefId,
+    },
 }
 
 #[derive(Debug, Clone)]
 pub struct Edge {
-    from: HirId,
-    to: HirId,
+    from: usize,
+    to: usize,
     label: String,
 }
 
@@ -73,26 +82,53 @@ impl Graph {
         }
     }
 
-    pub fn add_node(&mut self, node: Node) {
-        if !self.nodes.contains(&node) {
-            self.nodes.push(node);
-        }
-    }
-
-    pub fn get_node(&self, id: HirId) -> Option<&Node> {
-        for node in &self.nodes {
-            if node.id == id {
-                return Some(node);
-            }
-        }
-
-        None
+    pub fn add_node(&mut self, label: &str, node_kind: NodeKind) -> usize {
+        let node = Node::new(self.nodes.len(), label, node_kind);
+        let id = node.id();
+        self.nodes.push(node);
+        id
     }
 
     pub fn add_edge(&mut self, edge: Edge) {
         if !self.edges.contains(&edge) {
             self.edges.push(edge);
         }
+    }
+
+    pub fn has_node(&self, node: &Node) -> bool {
+        self.nodes.contains(node)
+    }
+
+    pub fn get_node(&self, id: usize) -> Option<Node> {
+        return if id < self.nodes.len() {
+            Some(self.nodes[id].clone())
+        } else {
+            None
+        };
+    }
+
+    pub fn find_local_fn_node(&self, id: HirId) -> Option<Node> {
+        for node in &self.nodes {
+            if let NodeKind::LocalFn {hir_id} = node.kind {
+                if hir_id == id {
+                    return Some(node.clone())
+                }
+            }
+        }
+
+        None
+    }
+
+    pub fn find_non_local_fn_node(&self, id: DefId) -> Option<Node> {
+        for node in &self.nodes {
+            if let NodeKind::NonLocalFn {def_id} = node.kind {
+                if def_id == id {
+                    return Some(node.clone())
+                }
+            }
+        }
+
+        None
     }
 
     pub fn to_dot(self) -> String {
@@ -105,40 +141,65 @@ impl Graph {
 }
 
 impl Node {
-    pub fn new(id: HirId, label: &str) -> Self {
+    fn new(node_id: usize, label: &str, node_type: NodeKind) -> Self {
         Node {
-            id,
+            id: node_id,
             label: String::from(label),
+            kind: node_type,
         }
     }
 
-    pub fn id(&self) -> HirId {
+    pub fn id(&self) -> usize {
         self.id
     }
 }
 
-impl PartialEq for Node {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
+impl NodeKind {
+    pub fn local_fn(id: HirId) -> Self {
+        NodeKind::LocalFn { hir_id: id }
     }
-}
 
-impl PartialEq for Edge {
-    fn eq(&self, other: &Self) -> bool {
-        self.to == other.to && self.from == other.from
+    pub fn non_local_fn(id: DefId) -> Self {
+        NodeKind::NonLocalFn { def_id: id }
     }
 }
 
 impl Edge {
-    pub fn new(from: &Node, to: &Node) -> Self {
+    pub fn new(from: usize, to: usize) -> Self {
         Edge {
-            from: from.id(),
-            to: to.id(),
+            from,
+            to,
             label: String::new(),
         }
     }
 
     pub fn label(mut self, label: &str) {
         self.label = String::from(label);
+    }
+}
+
+impl PartialEq for Node {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id && self.kind == other.kind
+    }
+}
+
+impl PartialEq for NodeKind {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (NodeKind::LocalFn { hir_id: id1 }, NodeKind::LocalFn { hir_id: id2 }) => {
+                id1 == id2
+            }
+            (NodeKind::NonLocalFn { def_id: id1 }, NodeKind::NonLocalFn { def_id: id2 }) => {
+                id1 == id2
+            }
+            _ => false
+        }
+    }
+}
+
+impl PartialEq for Edge {
+    fn eq(&self, other: &Self) -> bool {
+        self.to == other.to && self.from == other.from
     }
 }
