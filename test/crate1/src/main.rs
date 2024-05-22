@@ -10,7 +10,7 @@ fn main() {
 
     let handle = spawn(res);
     let join = handle.join();
-    let res = join.unwrap().unwrap();
+    let res = join.expect("Thread panicked!");
 }
 
 fn fn1() -> Res<()> {

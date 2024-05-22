@@ -1,6 +1,5 @@
-use dot::GraphWalk;
 use crate::graph::{Edge, Graph, Node, NodeKind};
-use rustc_hir::def::{DefKind, NonMacroAttrKind, Res};
+use rustc_hir::def::{DefKind, Res};
 use rustc_hir::{Block, Expr, ExprKind, Item, ItemKind, Pat, PatKind, QPath, StmtKind, TyKind, HirId, FnRetTy, Ty};
 use rustc_hir::def_id::DefId;
 use rustc_middle::ty::TyCtxt;
@@ -26,7 +25,7 @@ use rustc_middle::ty::TyCtxt;
 /// Step 5: Remove functions that don't error/panic from graph
 pub fn analyze(context: TyCtxt) -> Option<Graph> {
     // Get the entry point of the program
-    let (def_id, entry_type) = context.entry_fn(())?;
+    let (def_id, _entry_type) = context.entry_fn(())?;
     let id = context.local_def_id_to_hir_id(def_id.as_local()?);
     let entry_node = context.hir_node(id);
 
@@ -35,9 +34,9 @@ pub fn analyze(context: TyCtxt) -> Option<Graph> {
 
     // TODO: Attach return type info
     for edge in &mut graph.edges {
-        if let Some(ret) = get_return_type(context, &graph.nodes[edge.to]) {
-            edge.set_label(&return_type_to_label(context, ret));
-        }
+        //if let Some(ret) = get_return_type(context, &graph.nodes[edge.to]) {
+            //edge.set_label(&return_type_to_label(context, ret));
+        //}
     }
 
     // TODO: Error propagation chains
