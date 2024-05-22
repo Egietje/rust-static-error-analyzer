@@ -5,16 +5,19 @@ use std::thread::spawn;
 
 fn main() {
     fn1();
+    fn1();
     fn2();
 
     let handle = spawn(res);
-    let res = handle.join();
-    res.unwrap().unwrap();
+    let join = handle.join();
+    let res = join.unwrap().unwrap();
 }
 
-fn fn1() {
+fn fn1() -> Res<()> {
     main();
     fn4();
+
+    Ok(())
 }
 
 fn fn2() {
@@ -28,3 +31,5 @@ fn res() -> Result<(), ()> {
 }
 
 fn unreachable() {}
+
+type Res<T> = Result<T, ()>;

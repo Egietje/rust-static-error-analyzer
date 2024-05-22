@@ -6,8 +6,33 @@ use std::cmp::PartialEq;
 
 #[derive(Debug, Clone)]
 pub struct Graph {
-    nodes: Vec<Node>,
-    edges: Vec<Edge>,
+    pub nodes: Vec<Node>,
+    pub edges: Vec<Edge>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Node {
+    pub id: usize,
+    pub label: String,
+    pub kind: NodeKind,
+}
+
+#[derive(Debug, Clone)]
+pub enum NodeKind {
+    LocalFn {
+        hir_id: HirId,
+    },
+    NonLocalFn {
+        def_id: DefId,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct Edge {
+    pub from: usize,
+    pub to: usize,
+    pub call_id: HirId,
+    label: String,
 }
 
 impl<'a> dot::Labeller<'a, Node, Edge> for Graph {
@@ -50,30 +75,6 @@ impl<'a> dot::GraphWalk<'a, Node, Edge> for Graph {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Node {
-    pub id: usize,
-    pub label: String,
-    pub kind: NodeKind,
-}
-
-#[derive(Debug, Clone)]
-pub enum NodeKind {
-    LocalFn {
-        hir_id: HirId,
-    },
-    NonLocalFn {
-        def_id: DefId,
-    },
-}
-
-#[derive(Debug, Clone)]
-pub struct Edge {
-    from: usize,
-    to: usize,
-    label: String,
-}
-
 impl Graph {
     pub fn new() -> Self {
         Graph {
@@ -90,13 +91,7 @@ impl Graph {
     }
 
     pub fn add_edge(&mut self, edge: Edge) {
-        if !self.edges.contains(&edge) {
-            self.edges.push(edge);
-        }
-    }
-
-    pub fn has_node(&self, node: &Node) -> bool {
-        self.nodes.contains(node)
+        self.edges.push(edge);
     }
 
     pub fn get_node(&self, id: usize) -> Option<Node> {
@@ -165,15 +160,16 @@ impl NodeKind {
 }
 
 impl Edge {
-    pub fn new(from: usize, to: usize) -> Self {
+    pub fn new(from: usize, to: usize, call_id: HirId) -> Self {
         Edge {
             from,
             to,
+            call_id,
             label: String::new(),
         }
     }
 
-    pub fn label(mut self, label: &str) {
+    pub fn set_label(&mut self, label: &str) {
         self.label = String::from(label);
     }
 }
