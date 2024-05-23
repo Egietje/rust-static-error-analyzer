@@ -2,7 +2,7 @@ use crate::graph::{Edge, Graph, Node, NodeKind};
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::{Block, Expr, ExprKind, Item, ItemKind, Pat, PatKind, QPath, StmtKind, TyKind, HirId, FnRetTy, Ty};
 use rustc_hir::def_id::DefId;
-use rustc_middle::ty::TyCtxt;
+use rustc_middle::ty::{GenericArg, GenericArgs, TyCtxt};
 
 /// Analysis steps:
 ///
@@ -25,18 +25,16 @@ use rustc_middle::ty::TyCtxt;
 /// Step 5: Remove functions that don't error/panic from graph
 pub fn analyze(context: TyCtxt) -> Option<Graph> {
     // Get the entry point of the program
-    let (def_id, _entry_type) = context.entry_fn(())?;
-    let id = context.local_def_id_to_hir_id(def_id.as_local()?);
-    let entry_node = context.hir_node(id);
+    let entry_node = get_entry_node(context)?;
 
     // Create call graph
     let mut graph = create_call_graph_from_root(context, entry_node.expect_item());
 
-    // TODO: Attach return type info
+    // Attach return type info
     for edge in &mut graph.edges {
-        //if let Some(ret) = get_return_type(context, &graph.nodes[edge.to]) {
-            //edge.set_label(&return_type_to_label(context, ret));
-        //}
+        if let Some(ret) = get_return_type(context, &graph.nodes[edge.to]) {
+            edge.set_label(&return_type_to_label(context, ret));
+        }
     }
 
     // TODO: Error propagation chains
@@ -46,6 +44,12 @@ pub fn analyze(context: TyCtxt) -> Option<Graph> {
     // TODO: Remove redundant nodes/edges
 
     Some(graph)
+}
+
+fn get_entry_node(context: TyCtxt) -> Option<rustc_hir::Node> {
+    let (def_id, _entry_type) = context.entry_fn(())?;
+    let id = context.local_def_id_to_hir_id(def_id.as_local()?);
+    Some(context.hir_node(id))
 }
 
 /// Create a call graph starting from the provided root node.
@@ -245,9 +249,7 @@ fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<(NodeKi
         }
         ExprKind::Closure(closure) => {
             // TODO verify this is correct
-            println!("{:?}", closure);
             let exp = context.hir_node(closure.body.hir_id).expect_expr();
-            println!("{:?}", exp);
             res.extend(get_function_calls_in_expression(context, exp));
         }
         ExprKind::Block(block, _lbl) => {
@@ -436,12 +438,16 @@ fn get_identifier(context: TyCtxt, def_id: DefId) -> Option<String> {
     context.opt_item_name(def_id).map(|s| s.to_ident_string())
 }
 
-fn return_type_to_label(context: TyCtxt, ret_type: FnRetTy) -> String {
+fn return_type_to_label<'a>(context: TyCtxt<'a>, ret_type: FnRetTy<'a>) -> String {
     match ret_type {
         FnRetTy::DefaultReturn(_) => { String::from("()") }
         FnRetTy::Return(ty) => {
-            if let Some(def_id) = get_type_def(context, ty) {
-                format!("{:?}", context.type_of(def_id))
+            if let Some((def_id, gen_args)) = get_type_def_with_args(context, ty) {
+                if let Some(args) = gen_args {
+                    format!("{:?}", context.type_of(def_id).instantiate(context, &args))
+                } else {
+                    format!("{:?}", context.type_of(def_id))
+                }
             } else {
                 String::new()
             }
@@ -449,19 +455,18 @@ fn return_type_to_label(context: TyCtxt, ret_type: FnRetTy) -> String {
     }
 }
 
-fn get_type_def(context: TyCtxt, ty: &Ty) -> Option<DefId> {
+fn get_type_def_with_args(context: TyCtxt, ty: &Ty) -> Option<(DefId, Option<GenericArgs>)> {
+    println!("{:?}", ty);
     match ty.kind {
         TyKind::Path(qpath) => {
             match qpath {
                 QPath::Resolved(_ty, path) => {
-                    match path.res {
-                        Res::Def(_kind, def_id) => {Some(def_id)}
-                        Res::SelfTyParam { trait_ } => {Some(trait_)}
-                        Res::SelfTyAlias { alias_to, .. } => {Some(alias_to)}
-                        Res::SelfCtor(def_id) => {Some(def_id)}
-                        Res::Local(hir_id) => {Some(hir_id.owner.to_def_id())}
-                        _ => None
+                    let def_id = path.res.opt_def_id()?;
+                    for seg in path.segments {
+                        // TODO: check against def_id and attach args
+
                     }
+                    None
                 }
                 QPath::TypeRelative(_, _) => {None}
                 QPath::LangItem(_, _) => {None}
@@ -469,6 +474,21 @@ fn get_type_def(context: TyCtxt, ty: &Ty) -> Option<DefId> {
         }
         _ => None
     }
+}
+
+fn get_generic_args<'a>(context: TyCtxt<'a>, ty: &'a Ty<'a>) -> Option<Vec<GenericArg<'a>>> {
+    if let TyKind::Path(qpath) = ty.kind {
+        if let QPath::Resolved(ty, path) = qpath {
+            for seg in path.segments {
+                if let Some(args) = seg.args {
+                    for arg in args.args {
+                        println!("{:?}", arg);
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 fn get_return_type<'a>(context: TyCtxt<'a>, node: &Node) -> Option<FnRetTy<'a>> {
