@@ -1,6 +1,6 @@
 use dot::{Edges, Nodes};
-use rustc_hir::HirId;
 use rustc_hir::def_id::DefId;
+use rustc_hir::HirId;
 use std::borrow::Cow;
 use std::cmp::PartialEq;
 
@@ -12,19 +12,15 @@ pub struct Graph {
 
 #[derive(Debug, Clone)]
 pub struct Node {
-    pub id: usize,
-    pub label: String,
+    id: usize,
+    label: String,
     pub kind: NodeKind,
 }
 
 #[derive(Debug, Clone)]
 pub enum NodeKind {
-    LocalFn {
-        hir_id: HirId,
-    },
-    NonLocalFn {
-        def_id: DefId,
-    },
+    LocalFn(HirId),
+    NonLocalFn(DefId),
 }
 
 #[derive(Debug, Clone)]
@@ -104,9 +100,9 @@ impl Graph {
 
     pub fn find_local_fn_node(&self, id: HirId) -> Option<Node> {
         for node in &self.nodes {
-            if let NodeKind::LocalFn {hir_id} = node.kind {
+            if let NodeKind::LocalFn(hir_id) = node.kind {
                 if hir_id == id {
-                    return Some(node.clone())
+                    return Some(node.clone());
                 }
             }
         }
@@ -116,9 +112,9 @@ impl Graph {
 
     pub fn find_non_local_fn_node(&self, id: DefId) -> Option<Node> {
         for node in &self.nodes {
-            if let NodeKind::NonLocalFn {def_id} = node.kind {
+            if let NodeKind::NonLocalFn(def_id) = node.kind {
                 if def_id == id {
-                    return Some(node.clone())
+                    return Some(node.clone());
                 }
             }
         }
@@ -132,6 +128,18 @@ impl Graph {
         dot::render(&self, &mut buf).unwrap();
 
         String::from_utf8(buf).unwrap()
+    }
+
+    pub fn incoming_edges(&mut self, node: &Node) -> Vec<&mut Edge> {
+        let mut res = vec![];
+
+        for edge in &mut self.edges {
+            if edge.to == node.id {
+                res.push(edge);
+            }
+        }
+
+        res
     }
 }
 
@@ -147,15 +155,29 @@ impl Node {
     pub fn id(&self) -> usize {
         self.id
     }
+
+    pub fn def_id(&self) -> DefId {
+        match self.kind {
+            NodeKind::LocalFn(hir_id) => hir_id.owner.to_def_id(),
+            NodeKind::NonLocalFn(def_id) => def_id,
+        }
+    }
 }
 
 impl NodeKind {
     pub fn local_fn(id: HirId) -> Self {
-        NodeKind::LocalFn { hir_id: id }
+        NodeKind::LocalFn(id)
     }
 
     pub fn non_local_fn(id: DefId) -> Self {
-        NodeKind::NonLocalFn { def_id: id }
+        NodeKind::NonLocalFn(id)
+    }
+
+    pub fn def_id(&self) -> DefId {
+        match self {
+            NodeKind::LocalFn(hir_id) => hir_id.owner.to_def_id(),
+            NodeKind::NonLocalFn(def_id) => def_id.clone(),
+        }
     }
 }
 
@@ -183,13 +205,9 @@ impl PartialEq for Node {
 impl PartialEq for NodeKind {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (NodeKind::LocalFn { hir_id: id1 }, NodeKind::LocalFn { hir_id: id2 }) => {
-                id1 == id2
-            }
-            (NodeKind::NonLocalFn { def_id: id1 }, NodeKind::NonLocalFn { def_id: id2 }) => {
-                id1 == id2
-            }
-            _ => false
+            (NodeKind::LocalFn(id1), NodeKind::LocalFn(id2)) => id1 == id2,
+            (NodeKind::NonLocalFn(id1), NodeKind::NonLocalFn(id2)) => id1 == id2,
+            _ => false,
         }
     }
 }

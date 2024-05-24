@@ -11,6 +11,15 @@ fn main() {
     let handle = spawn(res);
     let join = handle.join();
     let res = join.expect("Thread panicked!");
+
+    let x: usize = 1;
+    match x {
+        _ => {}
+    }
+}
+
+const fn test() -> usize {
+    1
 }
 
 fn fn1() -> Res<()> {

@@ -1,8 +1,10 @@
 use crate::graph::{Edge, Graph, Node, NodeKind};
 use rustc_hir::def::{DefKind, Res};
-use rustc_hir::{Block, Expr, ExprKind, Item, ItemKind, Pat, PatKind, QPath, StmtKind, TyKind, HirId, FnRetTy, Ty};
 use rustc_hir::def_id::DefId;
-use rustc_middle::ty::{GenericArg, GenericArgs, TyCtxt};
+use rustc_hir::{
+    Block, Expr, ExprKind, HirId, Item, ItemKind, Pat, PatKind, QPath, StmtKind, TyKind,
+};
+use rustc_middle::ty::{Ty, TyCtxt};
 
 /// Analysis steps:
 ///
@@ -25,15 +27,17 @@ use rustc_middle::ty::{GenericArg, GenericArgs, TyCtxt};
 /// Step 5: Remove functions that don't error/panic from graph
 pub fn analyze(context: TyCtxt) -> Option<Graph> {
     // Get the entry point of the program
-    let entry_node = get_entry_node(context)?;
+    let entry_node = get_entry_node(context);
 
     // Create call graph
     let mut graph = create_call_graph_from_root(context, entry_node.expect_item());
 
     // Attach return type info
-    for edge in &mut graph.edges {
-        if let Some(ret) = get_return_type(context, &graph.nodes[edge.to]) {
-            edge.set_label(&return_type_to_label(context, ret));
+    for node in &graph.nodes.clone() {
+        let ret_ty = get_return_type(context, node);
+        for edge in graph.incoming_edges(node) {
+            edge.set_label(&format!("{ret_ty:?}"));
+            println!("{}", is_result_type(ret_ty));
         }
     }
 
@@ -46,10 +50,13 @@ pub fn analyze(context: TyCtxt) -> Option<Graph> {
     Some(graph)
 }
 
-fn get_entry_node(context: TyCtxt) -> Option<rustc_hir::Node> {
-    let (def_id, _entry_type) = context.entry_fn(())?;
-    let id = context.local_def_id_to_hir_id(def_id.as_local()?);
-    Some(context.hir_node(id))
+fn get_entry_node(context: TyCtxt) -> rustc_hir::Node {
+    let (def_id, _entry_type) = context
+        .entry_fn(())
+        .expect("Could not find entry function!");
+    let id = context
+        .local_def_id_to_hir_id(def_id.as_local().expect("Entry function def id not local!"));
+    context.hir_node(id)
 }
 
 /// Create a call graph starting from the provided root node.
@@ -60,7 +67,7 @@ fn create_call_graph_from_root(context: TyCtxt, item: &Item) -> Graph {
     if let ItemKind::Fn(_sig, _gen, id) = item.kind {
         // Create a node for the function
         let node = NodeKind::local_fn(item.hir_id());
-        let node_id = graph.add_node(&get_full_name(context, &node), node);
+        let node_id = graph.add_node(&get_path_string(context, node.def_id()), node);
 
         // Add edges/nodes for all functions called from within this function (and recursively do it for those functions as well)
         graph = add_calls_from_function(context, node_id, id.hir_id, graph);
@@ -70,7 +77,12 @@ fn create_call_graph_from_root(context: TyCtxt, item: &Item) -> Graph {
 }
 
 /// Retrieve all function calls within a function, and add the nodes and edges to the graph.
-fn add_calls_from_function(context: TyCtxt, from_node: usize, fn_id: HirId, mut graph: Graph) -> Graph {
+fn add_calls_from_function(
+    context: TyCtxt,
+    from_node: usize,
+    fn_id: HirId,
+    mut graph: Graph,
+) -> Graph {
     let node = context.hir_node(fn_id);
 
     // Access the code block of the function (might be wrapped in expr)
@@ -102,27 +114,27 @@ fn add_calls_from_block(context: TyCtxt, from: usize, block: &Block, mut graph: 
     // Add edges for all function calls
     for (node_kind, call_id) in calls {
         match node_kind {
-            NodeKind::LocalFn { hir_id } => {
+            NodeKind::LocalFn(hir_id) => {
                 if let Some(node) = graph.find_local_fn_node(hir_id) {
                     // We have already encountered this local function, so just add the edge
                     graph.add_edge(Edge::new(from, node.id(), call_id));
                 } else {
                     // We have not yet explored this local function, so add new node and edge,
-                    // and explore it
-                    let id = graph.add_node(&get_full_name(context, &node_kind), node_kind);
+                    // and explore it.
+                    let id = graph.add_node(&get_path_string(context, node_kind.def_id()), node_kind);
 
                     graph.add_edge(Edge::new(from, id, call_id));
 
                     graph = add_calls_from_function(context, id, hir_id, graph);
                 }
             }
-            NodeKind::NonLocalFn { def_id } => {
+            NodeKind::NonLocalFn(def_id) => {
                 if let Some(node) = graph.find_non_local_fn_node(def_id) {
                     // We have already encountered this non-local function, so just add the edge
                     graph.add_edge(Edge::new(from, node.id(), call_id));
                 } else {
                     // We have not yet explored this non-local function, so add new node and edge
-                    let id = graph.add_node(&get_full_name(context, &node_kind), node_kind);
+                    let id = graph.add_node(&get_path_string(context, node_kind.def_id()), node_kind);
 
                     graph.add_edge(Edge::new(from, id, call_id));
                 }
@@ -191,7 +203,10 @@ fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<(NodeKi
             }
         }
         ExprKind::MethodCall(_path, exp, args, _span) => {
-            if let Some(def_id) = context.typeck(expr.hir_id.owner.def_id).type_dependent_def_id(expr.hir_id) {
+            if let Some(def_id) = context
+                .typeck(expr.hir_id.owner.def_id)
+                .type_dependent_def_id(expr.hir_id)
+            {
                 res.push((NodeKind::non_local_fn(def_id), expr.hir_id));
             }
             res.extend(get_function_calls_in_expression(context, exp));
@@ -326,17 +341,45 @@ fn get_function_calls_in_pattern(context: TyCtxt, pat: &Pat) -> Vec<(NodeKind, H
 
     match pat.kind {
         PatKind::Wild => {}
-        PatKind::Binding(a, b, c, d) => {}
-        PatKind::Struct(a, b, c) => {}
-        PatKind::TupleStruct(a, b, c) => {}
-        PatKind::Or(a) => {}
+        PatKind::Binding(_mode, _hir_id, _ident, opt_pat) => {
+            if let Some(p) = opt_pat {
+                res.extend(get_function_calls_in_pattern(context, p));
+            }
+        }
+        PatKind::Struct(_path, fields, _other) => {
+            for field in fields {
+                res.extend(get_function_calls_in_pattern(context, field.pat));
+            }
+        }
+        PatKind::TupleStruct(_path, pats, _pos) => {
+            for p in pats {
+                res.extend(get_function_calls_in_pattern(context, p));
+            }
+        }
+        PatKind::Or(pats) => {
+            for p in pats {
+                res.extend(get_function_calls_in_pattern(context, p));
+            }
+        }
         PatKind::Never => {}
-        PatKind::Path(a) => {}
-        PatKind::Tuple(a, b) => {}
-        PatKind::Box(a) => {}
-        PatKind::Deref(a) => {}
-        PatKind::Ref(a, b) => {}
-        PatKind::Lit(a) => {}
+        PatKind::Path(_path) => {}
+        PatKind::Tuple(pats, _pos) => {
+            for p in pats {
+                res.extend(get_function_calls_in_pattern(context, p));
+            }
+        }
+        PatKind::Box(p) => {
+            res.extend(get_function_calls_in_pattern(context, p));
+        }
+        PatKind::Deref(p) => {
+            res.extend(get_function_calls_in_pattern(context, p));
+        }
+        PatKind::Ref(p, _mut) => {
+            res.extend(get_function_calls_in_pattern(context, p));
+        }
+        PatKind::Lit(exp) => {
+            res.extend(get_function_calls_in_expression(context, exp));
+        }
         PatKind::Range(a, b, _end) => {
             if let Some(exp) = a {
                 res.extend(get_function_calls_in_expression(context, exp));
@@ -345,7 +388,17 @@ fn get_function_calls_in_pattern(context: TyCtxt, pat: &Pat) -> Vec<(NodeKind, H
                 res.extend(get_function_calls_in_expression(context, exp));
             }
         }
-        PatKind::Slice(a, b, c) => {}
+        PatKind::Slice(pats1, opt_pat, pats2) => {
+            for p in pats1 {
+                res.extend(get_function_calls_in_pattern(context, p));
+            }
+            if let Some(p) = opt_pat {
+                res.extend(get_function_calls_in_pattern(context, p));
+            }
+            for p in pats2 {
+                res.extend(get_function_calls_in_pattern(context, p));
+            }
+        }
         PatKind::Err(_err) => {}
     }
 
@@ -357,31 +410,15 @@ fn get_node_kind_from_path(context: TyCtxt, qpath: QPath) -> Option<NodeKind> {
         QPath::Resolved(_ty, path) => {
             if let Res::Def(kind, id) = path.res {
                 if let DefKind::Fn = kind {
-                    if let Some(local_id) = id.as_local() {
-                        // Local function
-                        let hir_id = context.local_def_id_to_hir_id(local_id);
-                        let item = context.hir_node(hir_id).expect_item();
-                        if let ItemKind::Fn(_sig, _gen, body) = item.kind {
-                            return Some(NodeKind::local_fn(hir_id));
-                        }
-                    } else {
-                        // Non-local function
-                        return Some(NodeKind::non_local_fn(id));
-                    }
+                    return Some(get_node_kind_from_def_id(context, id));
                 }
             }
         }
-        QPath::TypeRelative(ty, segment) => {
+        QPath::TypeRelative(ty, _segment) => {
             if let TyKind::Path(path) = ty.kind {
                 if let QPath::Resolved(_ty, pat) = path {
                     if let Res::Def(_kind, id) = pat.res {
-                        if let Some(local_id) = id.as_local() {
-                            let hir_id = context.local_def_id_to_hir_id(local_id);
-                            let item = context.hir_node(hir_id).expect_item();
-                            if let ItemKind::Fn(_sig, _gen, body) = item.kind {
-                                return Some(NodeKind::local_fn(hir_id));
-                            }
-                        }
+                        return Some(get_node_kind_from_def_id(context, id));
                     }
                 }
             }
@@ -392,119 +429,30 @@ fn get_node_kind_from_path(context: TyCtxt, qpath: QPath) -> Option<NodeKind> {
     None
 }
 
-/// Get a string of a path from its path segments, including the crate name (e.g. crate::main)
-fn get_full_name(context: TyCtxt, node_kind: &NodeKind) -> String {
-    match node_kind {
-        NodeKind::LocalFn { hir_id } => {
-            get_fn_path(context, hir_id.owner.def_id.to_def_id())
-        }
-        NodeKind::NonLocalFn { def_id } => {
-            get_fn_path(context, def_id.clone())
-        }
+fn get_node_kind_from_def_id(context: TyCtxt, def_id: DefId) -> NodeKind {
+    return if let Some(local_id) = def_id.as_local() {
+        let hir_id = context.local_def_id_to_hir_id(local_id);
+        NodeKind::local_fn(hir_id)
+    } else {
+        NodeKind::non_local_fn(def_id)
     }
 }
 
-fn get_fn_path(context: TyCtxt, def_id: DefId) -> String {
-    let path: Vec<String> = get_fn_path_rec(context, def_id).into_iter().rev().collect();
-
-    let mut res = String::new();
-
-    for i in 0..path.len() {
-        res.push_str(&path[i]);
-        if i != path.len() - 1 {
-            res.push_str("::");
-        }
-    }
-
-    res
+fn get_path_string(context: TyCtxt, def_id: DefId) -> String {
+    format!(
+        "{}{}",
+        context.crate_name(context.def_path(def_id).krate),
+        context.def_path(def_id).to_string_no_crate_verbose()
+    )
 }
 
-fn get_fn_path_rec(context: TyCtxt, def_id: DefId) -> Vec<String> {
-    let mut res = Vec::new();
-
-    let ident = get_identifier(context, def_id);
-    if let Some(id) = ident {
-        res.push(id);
-    }
-
-    if let Some(parent) = context.opt_parent(def_id) {
-        res.extend(get_fn_path_rec(context, parent));
-    }
-
-    res
+fn is_result_type(ty: Ty) -> bool {
+    format!("{}", ty).starts_with("std::result::Result<")
 }
 
-fn get_identifier(context: TyCtxt, def_id: DefId) -> Option<String> {
-    context.opt_item_name(def_id).map(|s| s.to_ident_string())
-}
-
-fn return_type_to_label<'a>(context: TyCtxt<'a>, ret_type: FnRetTy<'a>) -> String {
-    match ret_type {
-        FnRetTy::DefaultReturn(_) => { String::from("()") }
-        FnRetTy::Return(ty) => {
-            if let Some((def_id, gen_args)) = get_type_def_with_args(context, ty) {
-                if let Some(args) = gen_args {
-                    format!("{:?}", context.type_of(def_id).instantiate(context, &args))
-                } else {
-                    format!("{:?}", context.type_of(def_id))
-                }
-            } else {
-                String::new()
-            }
-        }
-    }
-}
-
-fn get_type_def_with_args(context: TyCtxt, ty: &Ty) -> Option<(DefId, Option<GenericArgs>)> {
-    println!("{:?}", ty);
-    match ty.kind {
-        TyKind::Path(qpath) => {
-            match qpath {
-                QPath::Resolved(_ty, path) => {
-                    let def_id = path.res.opt_def_id()?;
-                    for seg in path.segments {
-                        // TODO: check against def_id and attach args
-
-                    }
-                    None
-                }
-                QPath::TypeRelative(_, _) => {None}
-                QPath::LangItem(_, _) => {None}
-            }
-        }
-        _ => None
-    }
-}
-
-fn get_generic_args<'a>(context: TyCtxt<'a>, ty: &'a Ty<'a>) -> Option<Vec<GenericArg<'a>>> {
-    if let TyKind::Path(qpath) = ty.kind {
-        if let QPath::Resolved(ty, path) = qpath {
-            for seg in path.segments {
-                if let Some(args) = seg.args {
-                    for arg in args.args {
-                        println!("{:?}", arg);
-                    }
-                }
-            }
-        }
-    }
-    None
-}
-
-fn get_return_type<'a>(context: TyCtxt<'a>, node: &Node) -> Option<FnRetTy<'a>> {
-    match node.kind {
-        NodeKind::LocalFn { hir_id } => {
-            let item = context.hir_node(hir_id).expect_item();
-            if let ItemKind::Fn(sig, gen, body) = item.kind {
-                println!("{:?}", sig.decl.output);
-                Some(sig.decl.output)
-            } else {
-                None
-            }
-        }
-        NodeKind::NonLocalFn { def_id } => {
-            println!("{:?}", context.type_of(def_id));
-            None
-        }
-    }
+fn get_return_type<'a>(context: TyCtxt<'a>, node: &Node) -> Ty<'a> {
+    context
+        .optimized_mir(node.def_id())
+        .bound_return_ty()
+        .skip_binder()
 }

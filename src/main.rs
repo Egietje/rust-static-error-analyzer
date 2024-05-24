@@ -10,6 +10,9 @@ extern crate rustc_middle;
 extern crate rustc_parse;
 extern crate rustc_session;
 
+use rustc_driver::Compilation;
+use rustc_interface::interface::Compiler;
+use rustc_interface::Queries;
 use std::path::PathBuf;
 use toml::Table;
 
@@ -28,7 +31,8 @@ fn main() {
     let manifest_path = get_manifest_path(&cargo_path);
 
     // Extract the compiler arguments from running `cargo build`
-    let compiler_args = get_compiler_args(&cargo_path, &manifest_path).expect("Could not get arguments from cargo build!");
+    let compiler_args = get_compiler_args(&cargo_path, &manifest_path)
+        .expect("Could not get arguments from cargo build!");
 
     // Enable CTRL + C
     rustc_driver::install_ctrlc_handler();
@@ -41,7 +45,11 @@ fn main() {
     rustc_driver::init_rustc_env_logger(&early_dcx);
 
     // Run the compiler using the retrieved args.
-    let exit_code = run_compiler(compiler_args, &mut AnalysisCallback, using_internal_features);
+    let exit_code = run_compiler(
+        compiler_args,
+        &mut AnalysisCallback,
+        using_internal_features,
+    );
 
     println!("Ran compiler, exit code: {exit_code}");
 }
@@ -124,7 +132,11 @@ fn cargo_clean(manifest_path: &PathBuf) -> String {
     clean_command.arg("-p");
     clean_command.arg(get_package_name(manifest_path));
 
-    clean_command.current_dir(manifest_path.parent().expect("Could not get manifest directory!"));
+    clean_command.current_dir(
+        manifest_path
+            .parent()
+            .expect("Could not get manifest directory!"),
+    );
 
     let output = clean_command.output().expect("Could not clean!");
 
@@ -134,9 +146,16 @@ fn cargo_clean(manifest_path: &PathBuf) -> String {
 fn get_package_name(manifest_path: &PathBuf) -> String {
     let file = std::fs::read(manifest_path).expect("Could not read manifest!");
     let content = String::from_utf8(file).expect("Invalid UTF8!");
-    let table = content.parse::<Table>().expect("Could not parse manifest as TOML!");
-    let package_table = table["package"].as_table().expect("No package info found in manifest!");
-    let package_name = package_table["name"].as_str().expect("No name found in package information!").to_owned();
+    let table = content
+        .parse::<Table>()
+        .expect("Could not parse manifest as TOML!");
+    let package_table = table["package"]
+        .as_table()
+        .expect("No package info found in manifest!");
+    let package_name = package_table["name"]
+        .as_str()
+        .expect("No name found in package information!")
+        .to_owned();
     return package_name;
 }
 
@@ -157,7 +176,10 @@ fn cargo_build_verbose(manifest_path: &PathBuf) -> String {
 fn get_rustc_invocation(build_output: &str) -> Option<String> {
     for line in build_output.split("\n") {
         for command in line.split("&& ") {
-            if command.contains("rustc") && command.contains("--crate-type bin") && command.contains("main.rs") {
+            if command.contains("rustc")
+                && command.contains("--crate-type bin")
+                && command.contains("main.rs")
+            {
                 return Some(String::from(command.trim_end_matches('`')));
             }
         }
@@ -186,11 +208,11 @@ fn run_compiler(
 struct AnalysisCallback;
 
 impl rustc_driver::Callbacks for AnalysisCallback {
-    fn after_analysis<'tcx>(
+    fn after_expansion<'tcx>(
         &mut self,
-        _compiler: &rustc_interface::interface::Compiler,
-        queries: &'tcx rustc_interface::Queries<'tcx>,
-    ) -> rustc_driver::Compilation {
+        _compiler: &Compiler,
+        queries: &'tcx Queries<'tcx>,
+    ) -> Compilation {
         // Access type context
         queries.global_ctxt().unwrap().enter(|context| {
             println!("Analyzing output...");
