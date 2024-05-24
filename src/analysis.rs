@@ -35,9 +35,11 @@ pub fn analyze(context: TyCtxt) -> Option<Graph> {
     // Attach return type info
     for node in &graph.nodes.clone() {
         let ret_ty = get_return_type(context, node);
-        for edge in graph.incoming_edges(node) {
-            edge.set_label(&format!("{ret_ty:?}"));
-            println!("{}", is_result_type(ret_ty));
+        if let Some(ty) = ret_ty {
+            for edge in graph.incoming_edges(node) {
+                edge.set_label(&format!("{ty:?}"));
+                println!("{}", is_result_type(ty));
+            }
         }
     }
 
@@ -335,12 +337,14 @@ fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<(NodeKi
     res
 }
 
-/// Retrieve a vec of all function calls made from within a pattern.
+/// Retrieve a vec of all function calls made from within a pattern (although I think it can never contain one).
 fn get_function_calls_in_pattern(context: TyCtxt, pat: &Pat) -> Vec<(NodeKind, HirId)> {
     let mut res: Vec<(NodeKind, HirId)> = vec![];
 
     match pat.kind {
-        PatKind::Wild => {}
+        PatKind::Wild => {
+            // No function calls here
+        }
         PatKind::Binding(_mode, _hir_id, _ident, opt_pat) => {
             if let Some(p) = opt_pat {
                 res.extend(get_function_calls_in_pattern(context, p));
@@ -361,8 +365,12 @@ fn get_function_calls_in_pattern(context: TyCtxt, pat: &Pat) -> Vec<(NodeKind, H
                 res.extend(get_function_calls_in_pattern(context, p));
             }
         }
-        PatKind::Never => {}
-        PatKind::Path(_path) => {}
+        PatKind::Never => {
+            // No function calls here
+        }
+        PatKind::Path(_path) => {
+            // No function calls here
+        }
         PatKind::Tuple(pats, _pos) => {
             for p in pats {
                 res.extend(get_function_calls_in_pattern(context, p));
@@ -399,7 +407,9 @@ fn get_function_calls_in_pattern(context: TyCtxt, pat: &Pat) -> Vec<(NodeKind, H
                 res.extend(get_function_calls_in_pattern(context, p));
             }
         }
-        PatKind::Err(_err) => {}
+        PatKind::Err(_err) => {
+            // No function calls here
+        }
     }
 
     res
@@ -450,9 +460,14 @@ fn is_result_type(ty: Ty) -> bool {
     format!("{}", ty).starts_with("std::result::Result<")
 }
 
-fn get_return_type<'a>(context: TyCtxt<'a>, node: &Node) -> Ty<'a> {
-    context
+fn get_return_type<'a>(context: TyCtxt<'a>, node: &Node) -> Option<Ty<'a>> {
+    if !context.is_mir_available(node.def_id()) {
+        return None;
+    }
+
+    Some(context
         .optimized_mir(node.def_id())
         .bound_return_ty()
         .skip_binder()
+    )
 }
