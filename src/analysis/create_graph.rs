@@ -1,68 +1,13 @@
-use crate::graph::{Edge, Graph, Node, NodeKind};
+use crate::graph::{Edge, Graph, NodeKind};
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::DefId;
 use rustc_hir::{
     Block, Expr, ExprKind, HirId, Item, ItemKind, Pat, PatKind, QPath, StmtKind, TyKind,
 };
-use rustc_middle::ty::{Ty, TyCtxt};
-
-/// Analysis steps:
-///
-/// Step 1: Create call graph (directional)
-/// Step 1.1: Node for each function (store def id and/or body id)
-/// Step 1.2: Edge for each function call
-/// Step 1.3: Look into how concurrency plays into all this
-///
-/// Step 2: Attach return type info to functions in call graph (only if it's of type Result?)
-/// Step 2.1: Loop over each function/node in call graph
-/// Step 2.2: Label incoming edges of this node (e.g. calls to this function) with return type retrieved using def id
-///
-/// Step 3: Investigate functions that call error functions (whether it handles or propagates)
-/// Step 3.1: Basic version: if calls error function and returns error, assume propagates
-/// Step 3.2: Basic version: if calls error function and doesn't return error, assume handles
-/// Step 3.3: Advanced version: not sure
-///
-/// Step 4: Attach panic info to functions in call graph
-///
-/// Step 5: Remove functions that don't error/panic from graph
-pub fn analyze(context: TyCtxt) -> Option<Graph> {
-    // Get the entry point of the program
-    let entry_node = get_entry_node(context);
-
-    // Create call graph
-    let mut graph = create_call_graph_from_root(context, entry_node.expect_item());
-
-    // Attach return type info
-    for node in &graph.nodes.clone() {
-        let ret_ty = get_return_type(context, node);
-        if let Some(ty) = ret_ty {
-            for edge in graph.incoming_edges(node) {
-                edge.set_label(&format!("{ty:?}"));
-                println!("{}", is_result_type(ty));
-            }
-        }
-    }
-
-    // TODO: Error propagation chains
-
-    // TODO: Attach panic info
-
-    // TODO: Remove redundant nodes/edges
-
-    Some(graph)
-}
-
-fn get_entry_node(context: TyCtxt) -> rustc_hir::Node {
-    let (def_id, _entry_type) = context
-        .entry_fn(())
-        .expect("Could not find entry function!");
-    let id = context
-        .local_def_id_to_hir_id(def_id.as_local().expect("Entry function def id not local!"));
-    context.hir_node(id)
-}
+use rustc_middle::ty::TyCtxt;
 
 /// Create a call graph starting from the provided root node.
-fn create_call_graph_from_root(context: TyCtxt, item: &Item) -> Graph {
+pub fn create_call_graph_from_root(context: TyCtxt, item: &Item) -> Graph {
     let mut graph = Graph::new();
 
     // Access the function
@@ -109,7 +54,12 @@ fn add_calls_from_function(
 }
 
 /// Retrieve all function calls within a block, and add the nodes and edges to the graph.
-fn add_calls_from_block(context: TyCtxt, from: usize, block: &Block, mut graph: Graph) -> Graph {
+fn add_calls_from_block<'a>(
+    context: TyCtxt,
+    from: usize,
+    block: &Block,
+    mut graph: Graph,
+) -> Graph {
     // Get the function calls from within this block
     let calls = get_function_calls_in_block(context, block);
 
@@ -123,7 +73,8 @@ fn add_calls_from_block(context: TyCtxt, from: usize, block: &Block, mut graph: 
                 } else {
                     // We have not yet explored this local function, so add new node and edge,
                     // and explore it.
-                    let id = graph.add_node(&get_path_string(context, node_kind.def_id()), node_kind);
+                    let id =
+                        graph.add_node(&get_path_string(context, node_kind.def_id()), node_kind);
 
                     graph.add_edge(Edge::new(from, id, call_id));
 
@@ -136,7 +87,8 @@ fn add_calls_from_block(context: TyCtxt, from: usize, block: &Block, mut graph: 
                     graph.add_edge(Edge::new(from, node.id(), call_id));
                 } else {
                     // We have not yet explored this non-local function, so add new node and edge
-                    let id = graph.add_node(&get_path_string(context, node_kind.def_id()), node_kind);
+                    let id =
+                        graph.add_node(&get_path_string(context, node_kind.def_id()), node_kind);
 
                     graph.add_edge(Edge::new(from, id, call_id));
                 }
@@ -445,7 +397,7 @@ fn get_node_kind_from_def_id(context: TyCtxt, def_id: DefId) -> NodeKind {
         NodeKind::local_fn(hir_id)
     } else {
         NodeKind::non_local_fn(def_id)
-    }
+    };
 }
 
 fn get_path_string(context: TyCtxt, def_id: DefId) -> String {
@@ -453,21 +405,5 @@ fn get_path_string(context: TyCtxt, def_id: DefId) -> String {
         "{}{}",
         context.crate_name(context.def_path(def_id).krate),
         context.def_path(def_id).to_string_no_crate_verbose()
-    )
-}
-
-fn is_result_type(ty: Ty) -> bool {
-    format!("{}", ty).starts_with("std::result::Result<")
-}
-
-fn get_return_type<'a>(context: TyCtxt<'a>, node: &Node) -> Option<Ty<'a>> {
-    if !context.is_mir_available(node.def_id()) {
-        return None;
-    }
-
-    Some(context
-        .optimized_mir(node.def_id())
-        .bound_return_ty()
-        .skip_binder()
     )
 }

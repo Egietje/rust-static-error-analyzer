@@ -208,7 +208,7 @@ fn run_compiler(
 struct AnalysisCallback;
 
 impl rustc_driver::Callbacks for AnalysisCallback {
-    fn after_expansion<'tcx>(
+    fn after_crate_root_parsing<'tcx>(
         &mut self,
         _compiler: &Compiler,
         queries: &'tcx Queries<'tcx>,
@@ -216,15 +216,17 @@ impl rustc_driver::Callbacks for AnalysisCallback {
         // Access type context
         queries.global_ctxt().unwrap().enter(|context| {
             println!("Analyzing output...");
-            // Analyze the type context
-            let graph = analysis::analyze(context).expect("No graph was made!");
+            // Analyze the program using the type context
+            let graph = analysis::analyze(context);
 
-            println!("Done!");
+            let dot = graph.to_dot();
+
+            println!("Analysis done!");
             println!();
-            println!("{}", graph.to_dot());
+            println!("{}", dot);
         });
 
         // No need to compile further
-        rustc_driver::Compilation::Stop
+        Compilation::Stop
     }
 }

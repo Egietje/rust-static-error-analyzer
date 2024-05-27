@@ -15,6 +15,7 @@ pub struct Node {
     id: usize,
     label: String,
     pub kind: NodeKind,
+    pub panics: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -28,30 +29,39 @@ pub struct Edge {
     pub from: usize,
     pub to: usize,
     pub call_id: HirId,
-    label: String,
+    pub ty: Option<String>,
 }
 
 impl<'a> dot::Labeller<'a, Node, Edge> for Graph {
-    fn graph_id(&'a self) -> dot::Id<'a> {
+    fn graph_id(&self) -> dot::Id<'a> {
         dot::Id::new("call_graph").unwrap()
     }
 
-    fn node_id(&'a self, n: &Node) -> dot::Id<'a> {
+    fn node_id(&self, n: &Node) -> dot::Id<'a> {
         dot::Id::new(format!("node{:?}", n.id)).unwrap()
     }
 
-    fn node_label(&'a self, n: &Node) -> dot::LabelText<'a> {
+    fn node_label(&self, n: &Node) -> dot::LabelText<'a> {
         dot::LabelText::label(n.label.clone())
     }
 
-    fn edge_label(&'a self, e: &Edge) -> dot::LabelText<'a> {
-        dot::LabelText::label(e.label.clone())
+    fn edge_label(&self, e: &Edge) -> dot::LabelText<'a> {
+        dot::LabelText::label(e.ty.clone().unwrap_or(String::from("unknown")))
     }
 }
 
 impl<'a> dot::GraphWalk<'a, Node, Edge> for Graph {
     fn nodes(&'a self) -> Nodes<'a, Node> {
-        Cow::Owned(self.nodes.clone())
+        let mut nodes = vec![];
+        for edge in &self.edges {
+            if !nodes.contains(&self.nodes[edge.from]) {
+                nodes.push(self.nodes[edge.from].clone());
+            }
+            if !nodes.contains(&self.nodes[edge.to]) {
+                nodes.push(self.nodes[edge.to].clone());
+            }
+        }
+        Cow::Owned(nodes)
     }
 
     fn edges(&'a self) -> Edges<'a, Edge> {
@@ -122,10 +132,10 @@ impl Graph {
         None
     }
 
-    pub fn to_dot(self) -> String {
+    pub fn to_dot(&self) -> String {
         let mut buf = Vec::new();
 
-        dot::render(&self, &mut buf).unwrap();
+        dot::render(self, &mut buf).unwrap();
 
         String::from_utf8(buf).unwrap()
     }
@@ -149,6 +159,7 @@ impl Node {
             id: node_id,
             label: String::from(label),
             kind: node_type,
+            panics: false,
         }
     }
 
@@ -157,10 +168,7 @@ impl Node {
     }
 
     pub fn def_id(&self) -> DefId {
-        match self.kind {
-            NodeKind::LocalFn(hir_id) => hir_id.owner.to_def_id(),
-            NodeKind::NonLocalFn(def_id) => def_id,
-        }
+        self.kind.def_id()
     }
 }
 
@@ -187,12 +195,8 @@ impl Edge {
             from,
             to,
             call_id,
-            label: String::new(),
+            ty: None,
         }
-    }
-
-    pub fn set_label(&mut self, label: &str) {
-        self.label = String::from(label);
     }
 }
 
