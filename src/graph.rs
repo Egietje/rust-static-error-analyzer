@@ -8,6 +8,7 @@ use std::cmp::PartialEq;
 pub struct Graph {
     pub nodes: Vec<Node>,
     pub edges: Vec<Edge>,
+    crate_name: String,
 }
 
 #[derive(Debug, Clone)]
@@ -34,11 +35,11 @@ pub struct Edge {
 
 impl<'a> dot::Labeller<'a, Node, Edge> for Graph {
     fn graph_id(&self) -> dot::Id<'a> {
-        dot::Id::new("call_graph").unwrap()
+        dot::Id::new(format!("crate_{}_error_propagation",self.crate_name)).unwrap()
     }
 
     fn node_id(&self, n: &Node) -> dot::Id<'a> {
-        dot::Id::new(format!("node{:?}", n.id)).unwrap()
+        dot::Id::new(format!("n{:?}", n.id)).unwrap()
     }
 
     fn node_label(&self, n: &Node) -> dot::LabelText<'a> {
@@ -82,10 +83,11 @@ impl<'a> dot::GraphWalk<'a, Node, Edge> for Graph {
 }
 
 impl Graph {
-    pub fn new() -> Self {
+    pub fn new(crate_name: String) -> Self {
         Graph {
             nodes: Vec::new(),
             edges: Vec::new(),
+            crate_name,
         }
     }
 
@@ -169,11 +171,7 @@ impl Node {
 }
 
 impl NodeKind {
-    pub fn local_fn_standard(id: HirId) -> Self {
-        NodeKind::LocalFn(id.owner.to_def_id(), id)
-    }
-
-    pub fn local_fn_custom(def_id: DefId, hir_id: HirId) -> Self {
+    pub fn local_fn(def_id: DefId, hir_id: HirId) -> Self {
         NodeKind::LocalFn(def_id, hir_id)
     }
 
@@ -209,7 +207,9 @@ impl PartialEq for Node {
 impl PartialEq for NodeKind {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (NodeKind::LocalFn(def_id1, hir_id1), NodeKind::LocalFn(def_id2, hir_id2)) => def_id1 == def_id2 && hir_id1 == hir_id2,
+            (NodeKind::LocalFn(def_id1, hir_id1), NodeKind::LocalFn(def_id2, hir_id2)) => {
+                def_id1 == def_id2 && hir_id1 == hir_id2
+            }
             (NodeKind::NonLocalFn(id1), NodeKind::NonLocalFn(id2)) => id1 == id2,
             _ => false,
         }
