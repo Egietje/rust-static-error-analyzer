@@ -13,7 +13,7 @@ extern crate rustc_session;
 use rustc_driver::Compilation;
 use rustc_interface::interface::Compiler;
 use rustc_interface::Queries;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use toml::Table;
 
 /// Entry point, first sets up the compiler, and then runs it using the provided arguments.
@@ -27,7 +27,7 @@ fn main() {
         .unwrap_or_else(|_| std::process::exit(rustc_driver::EXIT_FAILURE));
 
     // Get the path to Cargo.toml
-    let cargo_path = get_relative_manifest_path(args);
+    let cargo_path = get_relative_manifest_path(&args);
     let manifest_path = get_manifest_path(&cargo_path);
 
     // Extract the compiler arguments from running `cargo build`
@@ -55,10 +55,10 @@ fn main() {
 }
 
 fn get_manifest_path(cargo_path: &str) -> PathBuf {
-    return std::env::current_dir().unwrap().join(cargo_path);
+    std::env::current_dir().unwrap().join(cargo_path)
 }
 
-fn get_relative_manifest_path<'a>(args: Vec<String>) -> String {
+fn get_relative_manifest_path(args: &[String]) -> String {
     if args.len() < 2 {
         String::from("Cargo.toml")
     } else {
@@ -74,14 +74,14 @@ fn get_relative_manifest_path<'a>(args: Vec<String>) -> String {
 fn get_compiler_args(relative_manifest_path: &str, manifest_path: &PathBuf) -> Option<Vec<String>> {
     cargo_clean(manifest_path);
 
-    let build_output = cargo_build_verbose(&manifest_path);
+    let build_output = cargo_build_verbose(manifest_path);
 
     let command = get_rustc_invocation(&build_output)?;
 
-    Some(split_args(relative_manifest_path, command))
+    Some(split_args(relative_manifest_path, &command))
 }
 
-fn split_args(relative_manifest_path: &str, command: String) -> Vec<String> {
+fn split_args(relative_manifest_path: &str, command: &str) -> Vec<String> {
     let mut res = vec![];
     let mut temp = String::new();
 
@@ -156,10 +156,10 @@ fn get_package_name(manifest_path: &PathBuf) -> String {
         .as_str()
         .expect("No name found in package information!")
         .to_owned();
-    return package_name;
+    package_name
 }
 
-fn cargo_build_verbose(manifest_path: &PathBuf) -> String {
+fn cargo_build_verbose(manifest_path: &Path) -> String {
     // TODO: interrupt build as to not compile the program twice
     println!("Building package...");
     let mut build_command = std::process::Command::new("cargo");
@@ -174,7 +174,7 @@ fn cargo_build_verbose(manifest_path: &PathBuf) -> String {
 }
 
 fn get_rustc_invocation(build_output: &str) -> Option<String> {
-    for line in build_output.split("\n") {
+    for line in build_output.split('\n') {
         for command in line.split("&& ") {
             if command.contains("rustc")
                 && command.contains("--crate-type bin")
@@ -185,7 +185,7 @@ fn get_rustc_invocation(build_output: &str) -> Option<String> {
         }
     }
 
-    return None;
+    None
 }
 
 /// Run a compiler with the provided arguments and callbacks.
@@ -223,7 +223,7 @@ impl rustc_driver::Callbacks for AnalysisCallback {
 
             println!("Analysis done!");
             println!();
-            println!("{}", dot);
+            println!("{dot}");
         });
 
         // No need to compile further

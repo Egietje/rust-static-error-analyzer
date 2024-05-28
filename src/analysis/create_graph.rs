@@ -22,7 +22,7 @@ pub fn create_call_graph_from_root(context: TyCtxt, item: &Item) -> Graph {
         graph = add_calls_from_function(context, node_id, id.hir_id, graph);
     }
 
-    return graph;
+    graph
 }
 
 /// Retrieve all function calls within a function, and add the nodes and edges to the graph.
@@ -40,7 +40,7 @@ fn add_calls_from_function(
             if let ExprKind::Block(block, _) = expr.kind {
                 graph = add_calls_from_block(context, from_node, block, graph);
             } else if let ExprKind::Closure(closure) = expr.kind {
-                graph = add_calls_from_function(context, from_node, closure.body.hir_id, graph)
+                graph = add_calls_from_function(context, from_node, closure.body.hir_id, graph);
             }
         }
         rustc_hir::Node::Block(block) => {
@@ -59,16 +59,11 @@ fn add_calls_from_function(
         _ => {}
     }
 
-    return graph;
+    graph
 }
 
 /// Retrieve all function calls within a block, and add the nodes and edges to the graph.
-fn add_calls_from_block<'a>(
-    context: TyCtxt,
-    from: usize,
-    block: &Block,
-    mut graph: Graph,
-) -> Graph {
+fn add_calls_from_block(context: TyCtxt, from: usize, block: &Block, mut graph: Graph) -> Graph {
     // Get the function calls from within this block
     let calls = get_function_calls_in_block(context, block);
 
@@ -111,7 +106,7 @@ fn add_calls_from_block<'a>(
         }
     }
 
-    return graph;
+    graph
 }
 
 /// Retrieve a vec of all function calls made within the body of a block.
@@ -135,10 +130,7 @@ fn get_function_calls_in_block(context: TyCtxt, block: &Block) -> Vec<(NodeKind,
             StmtKind::Item(_id) => {
                 // No function calls here
             }
-            StmtKind::Expr(exp) => {
-                res.extend(get_function_calls_in_expression(context, exp));
-            }
-            StmtKind::Semi(exp) => {
+            StmtKind::Expr(exp) | StmtKind::Semi(exp) => {
                 res.extend(get_function_calls_in_expression(context, exp));
             }
         }
@@ -148,24 +140,16 @@ fn get_function_calls_in_block(context: TyCtxt, block: &Block) -> Vec<(NodeKind,
 }
 
 /// Retrieve a vec of all function calls made within an expression.
+#[allow(clippy::too_many_lines)]
 fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<(NodeKind, HirId, bool)> {
     let mut res: Vec<(NodeKind, HirId, bool)> = vec![];
 
     // Match the kind of expression
     match expr.kind {
-        ExprKind::ConstBlock(block) => {
-            let node = context.hir_node(block.body.hir_id);
-            res.extend(get_function_calls_in_block(context, node.expect_block()));
-        }
-        ExprKind::Array(args) => {
-            for exp in args {
-                res.extend(get_function_calls_in_expression(context, exp));
-            }
-        }
         ExprKind::Call(func, args) => {
             if let Some(def_id) = get_call_def_id(context, expr.hir_id) {
                 let node_kind = get_node_kind_from_def_id(context, def_id);
-                res.push((node_kind, expr.hir_id, true))
+                res.push((node_kind, expr.hir_id, true));
             } else if let ExprKind::Path(qpath) = func.kind {
                 if let Some((node_kind, _add_edge)) = get_node_kind_from_path(context, qpath) {
                     res.push((node_kind, expr.hir_id, true));
@@ -178,7 +162,7 @@ fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<(NodeKi
         ExprKind::MethodCall(_path, exp, args, _span) => {
             if let Some(def_id) = get_call_def_id(context, expr.hir_id) {
                 let node_kind = get_node_kind_from_def_id(context, def_id);
-                res.push((node_kind, expr.hir_id, true))
+                res.push((node_kind, expr.hir_id, true));
             } else if let Some(def_id) = context
                 .typeck(expr.hir_id.owner.def_id)
                 .type_dependent_def_id(expr.hir_id)
@@ -198,43 +182,6 @@ fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<(NodeKi
                 res.extend(get_function_calls_in_expression(context, exp));
             }
         }
-        ExprKind::Tup(args) => {
-            for exp in args {
-                res.extend(get_function_calls_in_expression(context, exp));
-            }
-        }
-        ExprKind::Binary(_op, a, b) => {
-            res.extend(get_function_calls_in_expression(context, a));
-            res.extend(get_function_calls_in_expression(context, b));
-        }
-        ExprKind::Unary(_op, exp) => {
-            res.extend(get_function_calls_in_expression(context, exp));
-        }
-        ExprKind::Lit(_lit) => {
-            // No function calls here
-        }
-        ExprKind::Cast(exp, _ty) => {
-            res.extend(get_function_calls_in_expression(context, exp));
-        }
-        ExprKind::Type(exp, _ty) => {
-            res.extend(get_function_calls_in_expression(context, exp));
-        }
-        ExprKind::DropTemps(exp) => {
-            res.extend(get_function_calls_in_expression(context, exp));
-        }
-        ExprKind::Let(exp) => {
-            res.extend(get_function_calls_in_expression(context, exp.init));
-        }
-        ExprKind::If(a, b, c) => {
-            res.extend(get_function_calls_in_expression(context, a));
-            res.extend(get_function_calls_in_expression(context, b));
-            if let Some(exp) = c {
-                res.extend(get_function_calls_in_expression(context, exp));
-            }
-        }
-        ExprKind::Loop(block, _lbl, _src, _span) => {
-            res.extend(get_function_calls_in_block(context, block));
-        }
         ExprKind::Match(exp, arms, _src) => {
             // TODO: this is the result of try op (?)
             res.extend(get_function_calls_in_expression(context, exp));
@@ -252,6 +199,44 @@ fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<(NodeKi
                 context.local_def_id_to_hir_id(closure.def_id),
             );
             res.push((node_kind, expr.hir_id, false));
+        }
+        ExprKind::ConstBlock(block) => {
+            let node = context.hir_node(block.body.hir_id);
+            res.extend(get_function_calls_in_block(context, node.expect_block()));
+        }
+        ExprKind::Array(args) | ExprKind::Tup(args) => {
+            for exp in args {
+                res.extend(get_function_calls_in_expression(context, exp));
+            }
+        }
+        ExprKind::Binary(_op, a, b) => {
+            res.extend(get_function_calls_in_expression(context, a));
+            res.extend(get_function_calls_in_expression(context, b));
+        }
+        ExprKind::Unary(_op, exp) => {
+            res.extend(get_function_calls_in_expression(context, exp));
+        }
+        ExprKind::Lit(_lit) => {
+            // No function calls here
+        }
+        ExprKind::Cast(exp, _ty) | ExprKind::Type(exp, _ty) => {
+            res.extend(get_function_calls_in_expression(context, exp));
+        }
+        ExprKind::DropTemps(exp) | ExprKind::Become(exp) => {
+            res.extend(get_function_calls_in_expression(context, exp));
+        }
+        ExprKind::Let(exp) => {
+            res.extend(get_function_calls_in_expression(context, exp.init));
+        }
+        ExprKind::If(a, b, c) => {
+            res.extend(get_function_calls_in_expression(context, a));
+            res.extend(get_function_calls_in_expression(context, b));
+            if let Some(exp) = c {
+                res.extend(get_function_calls_in_expression(context, exp));
+            }
+        }
+        ExprKind::Loop(block, _lbl, _src, _span) => {
+            res.extend(get_function_calls_in_block(context, block));
         }
         ExprKind::Block(block, _lbl) => {
             res.extend(get_function_calls_in_block(context, block));
@@ -292,9 +277,6 @@ fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<(NodeKi
                 res.extend(get_function_calls_in_expression(context, exp));
             }
         }
-        ExprKind::Become(exp) => {
-            res.extend(get_function_calls_in_expression(context, exp));
-        }
         ExprKind::InlineAsm(_asm) => {
             // No function calls here
         }
@@ -328,7 +310,7 @@ fn get_function_calls_in_pattern(context: TyCtxt, pat: &Pat) -> Vec<(NodeKind, H
     let mut res: Vec<(NodeKind, HirId, bool)> = vec![];
 
     match pat.kind {
-        PatKind::Wild => {
+        PatKind::Wild | PatKind::Never => {
             // No function calls here
         }
         PatKind::Binding(_mode, _hir_id, _ident, opt_pat) => {
@@ -351,9 +333,6 @@ fn get_function_calls_in_pattern(context: TyCtxt, pat: &Pat) -> Vec<(NodeKind, H
                 res.extend(get_function_calls_in_pattern(context, p));
             }
         }
-        PatKind::Never => {
-            // No function calls here
-        }
         PatKind::Path(_path) => {
             // No function calls here
         }
@@ -362,10 +341,7 @@ fn get_function_calls_in_pattern(context: TyCtxt, pat: &Pat) -> Vec<(NodeKind, H
                 res.extend(get_function_calls_in_pattern(context, p));
             }
         }
-        PatKind::Box(p) => {
-            res.extend(get_function_calls_in_pattern(context, p));
-        }
-        PatKind::Deref(p) => {
+        PatKind::Box(p) | PatKind::Deref(p) => {
             res.extend(get_function_calls_in_pattern(context, p));
         }
         PatKind::Ref(p, _mut) => {
@@ -405,13 +381,10 @@ fn get_node_kind_from_path(context: TyCtxt, qpath: QPath) -> Option<(NodeKind, b
     match qpath {
         QPath::Resolved(_ty, path) => {
             if let Res::Def(kind, id) = path.res {
-                let add_edge: bool = match kind {
-                    DefKind::Fn => true,
-                    DefKind::Ctor(_, _) => true,
-                    DefKind::AssocFn => true,
-                    DefKind::Closure => true,
-                    _ => false,
-                };
+                let add_edge: bool = matches!(
+                    kind,
+                    DefKind::Fn | DefKind::Ctor(_, _) | DefKind::AssocFn | DefKind::Closure
+                );
                 return Some((get_node_kind_from_def_id(context, id), add_edge));
             }
         }
@@ -427,12 +400,12 @@ fn get_node_kind_from_path(context: TyCtxt, qpath: QPath) -> Option<(NodeKind, b
 }
 
 fn get_node_kind_from_def_id(context: TyCtxt, def_id: DefId) -> NodeKind {
-    return if let Some(local_id) = def_id.as_local() {
+    if let Some(local_id) = def_id.as_local() {
         let hir_id = context.local_def_id_to_hir_id(local_id);
         NodeKind::local_fn(def_id, hir_id)
     } else {
         NodeKind::non_local_fn(def_id)
-    };
+    }
 }
 
 pub fn get_call_def_id(context: TyCtxt, call_id: HirId) -> Option<DefId> {

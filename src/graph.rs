@@ -35,7 +35,7 @@ pub struct Edge {
 
 impl<'a> dot::Labeller<'a, Node, Edge> for Graph {
     fn graph_id(&self) -> dot::Id<'a> {
-        dot::Id::new(format!("crate_{}_error_propagation",self.crate_name)).unwrap()
+        dot::Id::new(format!("crate_{}_error_propagation", self.crate_name)).unwrap()
     }
 
     fn node_id(&self, n: &Node) -> dot::Id<'a> {
@@ -103,11 +103,11 @@ impl Graph {
     }
 
     pub fn get_node(&self, id: usize) -> Option<Node> {
-        return if id < self.nodes.len() {
+        if id < self.nodes.len() {
             Some(self.nodes[id].clone())
         } else {
             None
-        };
+        }
     }
 
     pub fn find_local_fn_node(&self, id: HirId) -> Option<Node> {
@@ -181,8 +181,8 @@ impl NodeKind {
 
     pub fn def_id(&self) -> DefId {
         match self {
-            NodeKind::LocalFn(def_id, _hir_id) => def_id.clone(),
-            NodeKind::NonLocalFn(def_id) => def_id.clone(),
+            NodeKind::LocalFn(def_id, _hir_id) => *def_id,
+            NodeKind::NonLocalFn(def_id) => *def_id,
         }
     }
 }
