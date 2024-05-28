@@ -35,6 +35,7 @@ fn fn2() {
 }
 
 fn res() -> Result<(), ()> {
+    unreachable();
     Ok(())
 }
 

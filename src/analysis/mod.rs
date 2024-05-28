@@ -40,16 +40,16 @@ pub fn analyze(context: TyCtxt) -> Graph {
     // TODO: Attach panic info
 
     // TODO: Remove redundant nodes/edges
-    for i in (0..graph.edges.len()).rev() {
-        let edge = &graph.edges[i];
-        if let Some(ty) = &edge.ty {
-            if !ty.starts_with("std::result::Result<") && !graph.nodes[edge.to].panics {
-                graph.edges.remove(i);
-            }
-        } else {
-            graph.edges.remove(i);
-        }
-    }
+    //for i in (0..graph.edges.len()).rev() {
+    //    let edge = &graph.edges[i];
+    //    if let Some(ty) = &edge.ty {
+    //        if !ty.starts_with("std::result::Result<") && !graph.nodes[edge.to].panics {
+    //            graph.edges.remove(i);
+    //        }
+    //    } else {
+    //        graph.edges.remove(i);
+    //    }
+    //}
 
     graph
 }

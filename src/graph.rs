@@ -166,10 +166,6 @@ impl Node {
     pub fn id(&self) -> usize {
         self.id
     }
-
-    pub fn def_id(&self) -> DefId {
-        self.kind.def_id()
-    }
 }
 
 impl NodeKind {
