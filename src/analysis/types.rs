@@ -1,18 +1,20 @@
+use rustc_hir::def_id::DefId;
 use rustc_hir::HirId;
 use rustc_middle::mir::TerminatorKind;
 use rustc_middle::ty::{Interner, Ty, TyCtxt};
 
-pub fn get_call_type(context: TyCtxt, call_id: HirId) -> Option<Ty> {
-    if !context.is_mir_available(call_id.owner.to_def_id()) {
+pub fn get_call_type(context: TyCtxt, call_id: HirId, body_id: DefId) -> Option<Ty> {
+    if !context.is_mir_available(body_id) {
         return None;
     }
 
-    let mir = context.optimized_mir(call_id.owner.to_def_id());
+    let mir = context.optimized_mir(body_id);
+    let call_expr = context.hir_node(call_id).expect_expr();
 
     for block in mir.basic_blocks.iter() {
         if let Some(terminator) = &block.terminator {
             if let TerminatorKind::Call { func, fn_span, .. } = &terminator.kind {
-                if context.hir_node(call_id).expect_expr().span.hi() == fn_span.hi() {
+                if call_expr.span.hi() == fn_span.hi() {
                     if let Some((def_id, args)) = func.const_fn_def() {
                         return Some(
                             context

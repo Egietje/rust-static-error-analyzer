@@ -31,7 +31,7 @@ pub fn analyze(context: TyCtxt) -> Graph {
 
     // Attach return type info
     for edge in &mut graph.edges {
-        let ret_ty = types::get_call_type(context, edge.call_id);
+        let ret_ty = types::get_call_type(context, edge.call_id, graph.nodes[edge.from].kind.def_id());
         edge.ty = ret_ty.map(|t| format!("{t}"));
     }
 

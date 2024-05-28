@@ -1,7 +1,10 @@
 use crate::graph::{Edge, Graph, NodeKind};
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::DefId;
-use rustc_hir::{Block, Expr, ExprKind, HirId, ImplItemKind, Item, ItemKind, Pat, PatKind, QPath, StmtKind, TyKind};
+use rustc_hir::{
+    Block, Expr, ExprKind, HirId, ImplItemKind, Item, ItemKind, Pat, PatKind, QPath, StmtKind,
+    TyKind,
+};
 use rustc_middle::mir::TerminatorKind;
 use rustc_middle::ty::TyCtxt;
 
@@ -12,7 +15,7 @@ pub fn create_call_graph_from_root(context: TyCtxt, item: &Item) -> Graph {
     // Access the function
     if let ItemKind::Fn(_sig, _gen, id) = item.kind {
         // Create a node for the function
-        let node = NodeKind::local_fn(item.hir_id());
+        let node = NodeKind::local_fn_standard(item.hir_id());
         let node_id = graph.add_node(&context.def_path_str(node.def_id()), node);
 
         // Add edges/nodes for all functions called from within this function (and recursively do it for those functions as well)
@@ -36,6 +39,8 @@ fn add_calls_from_function(
         rustc_hir::Node::Expr(expr) => {
             if let ExprKind::Block(block, _) = expr.kind {
                 graph = add_calls_from_block(context, from_node, block, graph);
+            } else if let ExprKind::Closure(closure) = expr.kind {
+                graph = add_calls_from_function(context, from_node, closure.body.hir_id, graph)
             }
         }
         rustc_hir::Node::Block(block) => {
@@ -70,7 +75,7 @@ fn add_calls_from_block<'a>(
     // Add edges for all function calls
     for (node_kind, call_id, add_edge) in calls {
         match node_kind {
-            NodeKind::LocalFn(hir_id) => {
+            NodeKind::LocalFn(_def_id, hir_id) => {
                 if let Some(node) = graph.find_local_fn_node(hir_id) {
                     // We have already encountered this local function, so just add the edge
                     if add_edge {
@@ -180,7 +185,7 @@ fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<(NodeKi
             {
                 if let Some(local_id) = def_id.as_local() {
                     res.push((
-                        NodeKind::local_fn(context.local_def_id_to_hir_id(local_id)),
+                        NodeKind::local_fn_standard(context.local_def_id_to_hir_id(local_id)),
                         expr.hir_id,
                         true,
                     ));
@@ -241,10 +246,9 @@ fn get_function_calls_in_expression(context: TyCtxt, expr: &Expr) -> Vec<(NodeKi
                 res.extend(get_function_calls_in_pattern(context, arm.pat));
             }
         }
-        ExprKind::Closure(_closure) => {
-            // TODO verify this is correct
-            //let exp = context.hir_node(closure.body.hir_id).expect_expr();
-            //res.extend(get_function_calls_in_expression(context, exp));
+        ExprKind::Closure(closure) => {
+            let node_kind = NodeKind::local_fn_custom(closure.def_id.to_def_id(), context.local_def_id_to_hir_id(closure.def_id));
+            res.push((node_kind, expr.hir_id, false));
         }
         ExprKind::Block(block, _lbl) => {
             res.extend(get_function_calls_in_block(context, block));
@@ -418,7 +422,7 @@ fn get_node_kind_from_path(context: TyCtxt, qpath: QPath) -> Option<NodeKind> {
 fn get_node_kind_from_def_id(context: TyCtxt, def_id: DefId) -> NodeKind {
     return if let Some(local_id) = def_id.as_local() {
         let hir_id = context.local_def_id_to_hir_id(local_id);
-        NodeKind::local_fn(hir_id)
+        NodeKind::local_fn_standard(hir_id)
     } else {
         NodeKind::non_local_fn(def_id)
     };

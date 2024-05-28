@@ -20,7 +20,7 @@ pub struct Node {
 
 #[derive(Debug, Clone)]
 pub enum NodeKind {
-    LocalFn(HirId),
+    LocalFn(DefId, HirId),
     NonLocalFn(DefId),
 }
 
@@ -110,7 +110,7 @@ impl Graph {
 
     pub fn find_local_fn_node(&self, id: HirId) -> Option<Node> {
         for node in &self.nodes {
-            if let NodeKind::LocalFn(hir_id) = node.kind {
+            if let NodeKind::LocalFn(_def_id, hir_id) = node.kind {
                 if hir_id == id {
                     return Some(node.clone());
                 }
@@ -169,8 +169,12 @@ impl Node {
 }
 
 impl NodeKind {
-    pub fn local_fn(id: HirId) -> Self {
-        NodeKind::LocalFn(id)
+    pub fn local_fn_standard(id: HirId) -> Self {
+        NodeKind::LocalFn(id.owner.to_def_id(), id)
+    }
+
+    pub fn local_fn_custom(def_id: DefId, hir_id: HirId) -> Self {
+        NodeKind::LocalFn(def_id, hir_id)
     }
 
     pub fn non_local_fn(id: DefId) -> Self {
@@ -179,7 +183,7 @@ impl NodeKind {
 
     pub fn def_id(&self) -> DefId {
         match self {
-            NodeKind::LocalFn(hir_id) => hir_id.owner.to_def_id(),
+            NodeKind::LocalFn(def_id, _hir_id) => def_id.clone(),
             NodeKind::NonLocalFn(def_id) => def_id.clone(),
         }
     }
@@ -205,7 +209,7 @@ impl PartialEq for Node {
 impl PartialEq for NodeKind {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (NodeKind::LocalFn(id1), NodeKind::LocalFn(id2)) => id1 == id2,
+            (NodeKind::LocalFn(def_id1, hir_id1), NodeKind::LocalFn(def_id2, hir_id2)) => def_id1 == def_id2 && hir_id1 == hir_id2,
             (NodeKind::NonLocalFn(id1), NodeKind::NonLocalFn(id2)) => id1 == id2,
             _ => false,
         }
