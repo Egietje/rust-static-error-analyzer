@@ -377,6 +377,7 @@ fn get_function_calls_in_pattern(context: TyCtxt, pat: &Pat) -> Vec<(NodeKind, H
     res
 }
 
+/// Get the node kind from a given `QPath`.
 fn get_node_kind_from_path(context: TyCtxt, qpath: QPath) -> Option<(NodeKind, bool)> {
     match qpath {
         QPath::Resolved(_ty, path) => {
@@ -399,6 +400,7 @@ fn get_node_kind_from_path(context: TyCtxt, qpath: QPath) -> Option<(NodeKind, b
     None
 }
 
+/// Get the `NodeKind` from a given `DefId`.
 fn get_node_kind_from_def_id(context: TyCtxt, def_id: DefId) -> NodeKind {
     if let Some(local_id) = def_id.as_local() {
         let hir_id = context.local_def_id_to_hir_id(local_id);
@@ -408,6 +410,7 @@ fn get_node_kind_from_def_id(context: TyCtxt, def_id: DefId) -> NodeKind {
     }
 }
 
+/// Get the `DefId` of the called function using the `HirId` of the call.
 pub fn get_call_def_id(context: TyCtxt, call_id: HirId) -> Option<DefId> {
     if !context.is_mir_available(call_id.owner.to_def_id()) {
         return None;

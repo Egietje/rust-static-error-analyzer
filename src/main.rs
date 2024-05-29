@@ -54,10 +54,12 @@ fn main() {
     println!("Ran compiler, exit code: {exit_code}");
 }
 
+/// Get the full path to the manifest.
 fn get_manifest_path(cargo_path: &str) -> PathBuf {
     std::env::current_dir().unwrap().join(cargo_path)
 }
 
+/// Get the relative path to the manifest from the current dir.
 fn get_relative_manifest_path(args: &[String]) -> String {
     if args.len() < 2 {
         String::from("Cargo.toml")
@@ -71,6 +73,7 @@ fn get_relative_manifest_path(args: &[String]) -> String {
     }
 }
 
+/// Get the compiler arguments used to compile the package by first running `cargo clean` and then `cargo build -vv`.
 fn get_compiler_args(relative_manifest_path: &str, manifest_path: &PathBuf) -> Option<Vec<String>> {
     cargo_clean(manifest_path);
 
@@ -81,6 +84,7 @@ fn get_compiler_args(relative_manifest_path: &str, manifest_path: &PathBuf) -> O
     Some(split_args(relative_manifest_path, &command))
 }
 
+/// Split up individual arguments from the command.
 fn split_args(relative_manifest_path: &str, command: &str) -> Vec<String> {
     let mut res = vec![];
     let mut temp = String::new();
@@ -125,6 +129,7 @@ fn split_args(relative_manifest_path: &str, command: &str) -> Vec<String> {
     res
 }
 
+/// Run `cargo clean -p PACKAGE`, where the package name is extracted from the given manifest.
 fn cargo_clean(manifest_path: &PathBuf) -> String {
     println!("Cleaning package...");
     let mut clean_command = std::process::Command::new("cargo");
@@ -143,6 +148,7 @@ fn cargo_clean(manifest_path: &PathBuf) -> String {
     String::from_utf8(output.stderr).expect("Invalid UTF8!")
 }
 
+/// Extract the package name from the given manifest.
 fn get_package_name(manifest_path: &PathBuf) -> String {
     let file = std::fs::read(manifest_path).expect("Could not read manifest!");
     let content = String::from_utf8(file).expect("Invalid UTF8!");
@@ -159,6 +165,7 @@ fn get_package_name(manifest_path: &PathBuf) -> String {
     package_name
 }
 
+/// Run `cargo build -vv` on the given manifest.
 fn cargo_build_verbose(manifest_path: &Path) -> String {
     // TODO: interrupt build as to not compile the program twice
     println!("Building package...");
@@ -173,6 +180,7 @@ fn cargo_build_verbose(manifest_path: &Path) -> String {
     String::from_utf8(output.stderr).expect("Invalid UTF8!")
 }
 
+/// Gets the rustc invocation command from the output of `cargo build -vv`.
 fn get_rustc_invocation(build_output: &str) -> Option<String> {
     for line in build_output.split('\n') {
         for command in line.split("&& ") {

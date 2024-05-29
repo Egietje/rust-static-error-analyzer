@@ -1,4 +1,4 @@
-use dot::{Edges, Nodes};
+use dot::{Edges, Kind, Nodes};
 use rustc_hir::def_id::DefId;
 use rustc_hir::HirId;
 use std::borrow::Cow;
@@ -35,7 +35,9 @@ pub struct Edge {
 
 impl<'a> dot::Labeller<'a, Node, Edge> for Graph {
     fn graph_id(&self) -> dot::Id<'a> {
-        dot::Id::new(format!("crate_{}_error_propagation", self.crate_name)).unwrap()
+        let mut name: String = self.crate_name.clone();
+        name.retain(|e| e.is_ascii_alphanumeric());
+        dot::Id::new(format!("error_propagation_{name}")).unwrap()
     }
 
     fn node_id(&self, n: &Node) -> dot::Id<'a> {
@@ -48,6 +50,10 @@ impl<'a> dot::Labeller<'a, Node, Edge> for Graph {
 
     fn edge_label(&self, e: &Edge) -> dot::LabelText<'a> {
         dot::LabelText::label(e.ty.clone().unwrap_or(String::from("unknown")))
+    }
+
+    fn kind(&self) -> Kind {
+        Kind::Digraph
     }
 }
 
@@ -70,19 +76,16 @@ impl<'a> dot::GraphWalk<'a, Node, Edge> for Graph {
     }
 
     fn source(&'a self, edge: &Edge) -> Node {
-        self.get_node(edge.from)
-            .expect("Node at edge's start does not exist!")
-            .clone()
+        self.nodes[edge.from].clone()
     }
 
     fn target(&'a self, edge: &Edge) -> Node {
-        self.get_node(edge.to)
-            .expect("Node at edge's end does not exist!")
-            .clone()
+        self.nodes[edge.to].clone()
     }
 }
 
 impl Graph {
+    /// Create a new, empty graph.
     pub fn new(crate_name: String) -> Self {
         Graph {
             nodes: Vec::new(),
@@ -91,6 +94,7 @@ impl Graph {
         }
     }
 
+    /// Add a node to this graph, returning its id.
     pub fn add_node(&mut self, label: &str, node_kind: NodeKind) -> usize {
         let node = Node::new(self.nodes.len(), label, node_kind);
         let id = node.id();
@@ -98,18 +102,12 @@ impl Graph {
         id
     }
 
+    /// Add an edge between two nodes to this graph.
     pub fn add_edge(&mut self, edge: Edge) {
         self.edges.push(edge);
     }
 
-    pub fn get_node(&self, id: usize) -> Option<Node> {
-        if id < self.nodes.len() {
-            Some(self.nodes[id].clone())
-        } else {
-            None
-        }
-    }
-
+    /// Find a node of `LocalFn` kind.
     pub fn find_local_fn_node(&self, id: HirId) -> Option<Node> {
         for node in &self.nodes {
             if let NodeKind::LocalFn(_def_id, hir_id) = node.kind {
@@ -122,6 +120,7 @@ impl Graph {
         None
     }
 
+    /// Find a node of `NonLocalFn` kind.
     pub fn find_non_local_fn_node(&self, id: DefId) -> Option<Node> {
         for node in &self.nodes {
             if let NodeKind::NonLocalFn(def_id) = node.kind {
@@ -134,6 +133,7 @@ impl Graph {
         None
     }
 
+    /// Convert this graph to dot representation.
     pub fn to_dot(&self) -> String {
         let mut buf = Vec::new();
 
@@ -141,21 +141,10 @@ impl Graph {
 
         String::from_utf8(buf).unwrap()
     }
-
-    pub fn incoming_edges(&mut self, node: &Node) -> Vec<&mut Edge> {
-        let mut res = vec![];
-
-        for edge in &mut self.edges {
-            if edge.to == node.id {
-                res.push(edge);
-            }
-        }
-
-        res
-    }
 }
 
 impl Node {
+    /// Create a new node.
     fn new(node_id: usize, label: &str, node_type: NodeKind) -> Self {
         Node {
             id: node_id,
@@ -165,20 +154,24 @@ impl Node {
         }
     }
 
+    /// Get the id of this node.
     pub fn id(&self) -> usize {
         self.id
     }
 }
 
 impl NodeKind {
+    /// Get a new `LocalFn`.
     pub fn local_fn(def_id: DefId, hir_id: HirId) -> Self {
         NodeKind::LocalFn(def_id, hir_id)
     }
 
+    /// Get a new `NonLocalFn`.
     pub fn non_local_fn(id: DefId) -> Self {
         NodeKind::NonLocalFn(id)
     }
 
+    /// Extract the `DefId` from this node.
     pub fn def_id(&self) -> DefId {
         match self {
             NodeKind::LocalFn(def_id, _hir_id) => *def_id,
@@ -188,6 +181,7 @@ impl NodeKind {
 }
 
 impl Edge {
+    /// Create a new edge.
     pub fn new(from: usize, to: usize, call_id: HirId) -> Self {
         Edge {
             from,

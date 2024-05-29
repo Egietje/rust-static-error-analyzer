@@ -3,6 +3,7 @@ use rustc_hir::HirId;
 use rustc_middle::mir::TerminatorKind;
 use rustc_middle::ty::{Interner, Ty, TyCtxt};
 
+/// Get the return type of a called function.
 pub fn get_call_type(context: TyCtxt, call_id: HirId, body_id: DefId) -> Option<Ty> {
     if !context.is_mir_available(body_id) {
         return None;

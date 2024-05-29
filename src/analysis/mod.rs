@@ -56,6 +56,7 @@ pub fn analyze(context: TyCtxt) -> Graph {
     graph
 }
 
+/// Retrieve the entry node (aka main function) from the type context.
 fn get_entry_node(context: TyCtxt) -> rustc_hir::Node {
     let (def_id, _entry_type) = context
         .entry_fn(())
