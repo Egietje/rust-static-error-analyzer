@@ -1,4 +1,4 @@
-use dot::{Edges, Kind, Nodes};
+use dot::{Edges, Kind, LabelText, Nodes};
 use rustc_hir::def_id::DefId;
 use rustc_hir::HirId;
 use std::borrow::Cow;
@@ -31,6 +31,7 @@ pub struct Edge {
     pub to: usize,
     pub call_id: HirId,
     pub ty: Option<String>,
+    propagates: bool,
 }
 
 impl<'a> dot::Labeller<'a, Node, Edge> for Graph {
@@ -44,12 +45,28 @@ impl<'a> dot::Labeller<'a, Node, Edge> for Graph {
         dot::Id::new(format!("n{:?}", n.id)).unwrap()
     }
 
-    fn node_label(&self, n: &Node) -> dot::LabelText<'a> {
-        dot::LabelText::label(n.label.clone())
+    fn node_label(&self, n: &Node) -> LabelText<'a> {
+        LabelText::label(n.label.clone())
     }
 
-    fn edge_label(&self, e: &Edge) -> dot::LabelText<'a> {
-        dot::LabelText::label(e.ty.clone().unwrap_or(String::from("unknown")))
+    fn edge_label(&self, e: &Edge) -> LabelText<'a> {
+        LabelText::label(e.ty.clone().unwrap_or(String::from("unknown")))
+    }
+
+    fn node_color(&'a self, n: &Node) -> Option<LabelText<'a>> {
+        if n.panics {
+            Some(LabelText::label("red"))
+        } else {
+            None
+        }
+    }
+
+    fn edge_color(&'a self, e: &Edge) -> Option<LabelText<'a>> {
+        if e.propagates {
+            Some(LabelText::label("blue"))
+        } else {
+            None
+        }
     }
 
     fn kind(&self) -> Kind {
@@ -182,12 +199,13 @@ impl NodeKind {
 
 impl Edge {
     /// Create a new edge.
-    pub fn new(from: usize, to: usize, call_id: HirId) -> Self {
+    pub fn new(from: usize, to: usize, call_id: HirId, propagates: bool) -> Self {
         Edge {
             from,
             to,
             call_id,
             ty: None,
+            propagates,
         }
     }
 }
