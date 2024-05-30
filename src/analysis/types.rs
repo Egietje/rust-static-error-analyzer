@@ -4,12 +4,12 @@ use rustc_middle::mir::TerminatorKind;
 use rustc_middle::ty::{Interner, Ty, TyCtxt};
 
 /// Get the return type of a called function.
-pub fn get_call_type(context: TyCtxt, call_id: HirId, body_id: DefId) -> Option<Ty> {
-    if !context.is_mir_available(body_id) {
+pub fn get_call_type(context: TyCtxt, call_id: HirId, caller_id: DefId, called_id: DefId) -> Option<Ty> {
+    if !context.is_mir_available(caller_id) {
         return None;
     }
 
-    let mir = context.optimized_mir(body_id);
+    let mir = context.optimized_mir(caller_id);
     let call_expr = context.hir_node(call_id).expect_expr();
 
     for block in mir.basic_blocks.iter() {
@@ -30,5 +30,5 @@ pub fn get_call_type(context: TyCtxt, call_id: HirId, body_id: DefId) -> Option<
         }
     }
 
-    None
+    Some(context.type_of(called_id).skip_binder())
 }

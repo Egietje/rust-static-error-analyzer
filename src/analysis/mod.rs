@@ -32,7 +32,7 @@ pub fn analyze(context: TyCtxt) -> Graph {
     // Attach return type info
     for edge in &mut graph.edges {
         let ret_ty =
-            types::get_call_type(context, edge.call_id, graph.nodes[edge.from].kind.def_id());
+            types::get_call_type(context, edge.call_id, graph.nodes[edge.from].kind.def_id(), graph.nodes[edge.to].kind.def_id());
         edge.ty = ret_ty.map(|t| format!("{t}"));
     }
 
@@ -41,17 +41,18 @@ pub fn analyze(context: TyCtxt) -> Graph {
     // TODO: Attach panic info
 
     // Remove redundant nodes/edges
-    // for i in (0..graph.edges.len()).rev() {
-    //     let edge = &graph.edges[i];
-    //     if !edge
-    //         .ty
-    //         .clone()
-    //         .is_some_and(|ty| ty.starts_with("std::result::Result<"))
-    //         && !graph.nodes[edge.to].panics
-    //     {
-    //         graph.edges.remove(i);
-    //     }
-    // }
+    for i in (0..graph.edges.len()).rev() {
+        let edge = &graph.edges[i];
+        if !edge
+            .ty
+            .clone()
+            .is_some_and(|ty| ty.starts_with("std::result::Result<"))
+            && !graph.nodes[edge.to].panics
+            && !edge.propagates
+        {
+            graph.edges.remove(i);
+        }
+    }
 
     graph
 }

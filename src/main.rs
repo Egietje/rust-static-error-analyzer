@@ -227,11 +227,9 @@ impl rustc_driver::Callbacks for AnalysisCallback {
             // Analyze the program using the type context
             let graph = analysis::analyze(context);
 
-            let dot = graph.to_dot();
-
             println!("Analysis done!");
             println!();
-            println!("{dot}");
+            println!("{}", graph.to_dot());
         });
 
         // No need to compile further

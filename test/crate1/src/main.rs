@@ -1,21 +1,19 @@
 mod mod1;
 
 fn main() {
-    test(&mut Test);
+    propagate();
 }
 
-fn fn1() -> Result<(), ()> {
-    Err(())
+fn result() -> Result<(), ()> {
+    Ok(())
 }
 
-fn test(test: &mut Test) {
-    // potentially calls test.ja()
-}
+fn propagate() -> Result<(), ()> {
+    let x = result().map_err(|_| ())?;
 
-struct Test;
+    let y = result().map_err(|_| ());
 
-impl Test {
-    fn ja(self) {
-        fn1();
-    }
+    let z = y?;
+
+    Ok(())
 }

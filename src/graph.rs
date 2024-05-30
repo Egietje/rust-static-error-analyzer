@@ -31,7 +31,7 @@ pub struct Edge {
     pub to: usize,
     pub call_id: HirId,
     pub ty: Option<String>,
-    propagates: bool,
+    pub propagates: bool,
 }
 
 impl<'a> dot::Labeller<'a, Node, Edge> for Graph {
