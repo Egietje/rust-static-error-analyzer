@@ -26,12 +26,24 @@ fn main() {
     let args = rustc_driver::args::raw_args(&early_dcx)
         .unwrap_or_else(|_| std::process::exit(rustc_driver::EXIT_FAILURE));
 
+    if args.len() < 3 {
+        eprintln!("Usage:");
+        eprintln!("static-result-analyzer.exe [input] [output]");
+        eprintln!();
+        eprintln!("Both paths should be relative.");
+        std::process::exit(rustc_driver::EXIT_FAILURE);
+    }
+
     // Get the path to Cargo.toml
-    let cargo_path = get_relative_manifest_path(&args);
-    let manifest_path = get_manifest_path(&cargo_path);
+    let relative_manifest_path = get_relative_manifest_path(&args);
+    let manifest_path = get_manifest_path(&relative_manifest_path);
+
+    // Get the path to the output file
+    let relative_output_path = get_relative_output_path(&args);
+    let output_path = get_output_path(&relative_output_path);
 
     // Extract the compiler arguments from running `cargo build`
-    let compiler_args = get_compiler_args(&cargo_path, &manifest_path)
+    let compiler_args = get_compiler_args(&relative_manifest_path, &manifest_path)
         .expect("Could not get arguments from cargo build!");
 
     // Enable CTRL + C
@@ -47,11 +59,26 @@ fn main() {
     // Run the compiler using the retrieved args.
     let exit_code = run_compiler(
         compiler_args,
-        &mut AnalysisCallback,
+        &mut AnalysisCallback(output_path),
         using_internal_features,
     );
 
     println!("Ran compiler, exit code: {exit_code}");
+}
+
+/// Get the full path to the manifest.
+fn get_output_path(output_path: &str) -> PathBuf {
+    std::env::current_dir().unwrap().join(output_path)
+}
+
+/// Get the relative path to the output file from the current dir.
+fn get_relative_output_path(args: &[String]) -> String {
+    let arg = args.get(2).unwrap();
+    if arg.ends_with(".dot") {
+        arg.clone()
+    } else {
+        String::from("output.dot")
+    }
 }
 
 /// Get the full path to the manifest.
@@ -61,15 +88,11 @@ fn get_manifest_path(cargo_path: &str) -> PathBuf {
 
 /// Get the relative path to the manifest from the current dir.
 fn get_relative_manifest_path(args: &[String]) -> String {
-    if args.len() < 2 {
-        String::from("Cargo.toml")
+    let arg = args.get(1).unwrap();
+    if arg.ends_with("Cargo.toml") {
+        arg.clone()
     } else {
-        let arg = args.get(1).unwrap();
-        if arg.ends_with("Cargo.toml") {
-            arg.clone()
-        } else {
-            String::from("Cargo.toml")
-        }
+        String::from("Cargo.toml")
     }
 }
 
@@ -213,7 +236,7 @@ fn run_compiler(
     })
 }
 
-struct AnalysisCallback;
+struct AnalysisCallback(PathBuf);
 
 impl rustc_driver::Callbacks for AnalysisCallback {
     fn after_crate_root_parsing<'tcx>(
@@ -226,10 +249,21 @@ impl rustc_driver::Callbacks for AnalysisCallback {
             println!("Analyzing output...");
             // Analyze the program using the type context
             let graph = analysis::analyze(context);
+            let dot = graph.to_dot();
 
-            println!("Analysis done!");
-            println!();
-            println!("{}", graph.to_dot());
+            println!("Writing graph...");
+
+            match std::fs::write(&self.0, dot.clone()) {
+                Ok(_) => {
+                    println!("Done!");
+                }
+                Err(e) => {
+                    eprintln!("Could not write output!");
+                    eprintln!("{}", e);
+                    eprintln!();
+                    println!("{}", dot);
+                }
+            }
         });
 
         // No need to compile further

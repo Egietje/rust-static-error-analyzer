@@ -31,14 +31,14 @@ pub fn analyze(context: TyCtxt) -> Graph {
 
     // Attach return type info
     for edge in &mut graph.edges {
-        let ret_ty =
-            types::get_call_type(context, edge.call_id, graph.nodes[edge.from].kind.def_id(), graph.nodes[edge.to].kind.def_id());
-        edge.ty = ret_ty.map(|t| format!("{t}"));
+        let ret_ty = types::get_call_type(
+            context,
+            edge.call_id,
+            graph.nodes[edge.from].kind.def_id(),
+            graph.nodes[edge.to].kind.def_id(),
+        );
+        edge.ty = Some(format!("{ret_ty}"));
     }
-
-    // TODO: Investigate functions that call error functions
-
-    // TODO: Attach panic info
 
     // Remove redundant nodes/edges
     for i in (0..graph.edges.len()).rev() {
@@ -53,6 +53,8 @@ pub fn analyze(context: TyCtxt) -> Graph {
             graph.edges.remove(i);
         }
     }
+
+    // TODO: Format output graph properly
 
     graph
 }
