@@ -22,7 +22,7 @@ use rustc_middle::ty::TyCtxt;
 /// Step 4: Attach panic info to functions in call graph
 ///
 /// Step 5: Remove functions that don't error/panic from graph
-pub fn analyze(context: TyCtxt) -> Graph {
+pub fn analyze(context: TyCtxt, remove_redundant: bool) -> Graph {
     // Get the entry point of the program
     let entry_node = get_entry_node(context);
 
@@ -37,20 +37,24 @@ pub fn analyze(context: TyCtxt) -> Graph {
             graph.nodes[edge.from].kind.def_id(),
             graph.nodes[edge.to].kind.def_id(),
         );
-        edge.ty = Some(format!("{ret_ty}"));
+        let res = types::extract_error_from_result(ret_ty);
+        if res.is_some() {
+            edge.ty = res;
+            edge.is_error = true;
+        } else {
+            edge.ty = Some(format!("{ret_ty}"));
+        }
     }
 
     // Remove redundant nodes/edges
-    for i in (0..graph.edges.len()).rev() {
-        let edge = &graph.edges[i];
-        if !edge
-            .ty
-            .clone()
-            .is_some_and(|ty| ty.starts_with("std::result::Result<"))
-            && !graph.nodes[edge.to].panics
-            && !edge.propagates
-        {
-            graph.edges.remove(i);
+    if remove_redundant {
+        for i in (0..graph.edges.len()).rev() {
+            let edge = &graph.edges[i];
+            if !edge.is_error
+                && !graph.nodes[edge.to].panics
+            {
+                graph.edges.remove(i);
+            }
         }
     }
 

@@ -1,4 +1,4 @@
-use dot::{Edges, Kind, LabelText, Nodes};
+use dot::{Edges, Kind, LabelText, Nodes, Style};
 use rustc_hir::def_id::DefId;
 use rustc_hir::HirId;
 use std::borrow::Cow;
@@ -32,12 +32,13 @@ pub struct Edge {
     pub call_id: HirId,
     pub ty: Option<String>,
     pub propagates: bool,
+    pub is_error: bool,
 }
 
 impl<'a> dot::Labeller<'a, Node, Edge> for Graph {
     fn graph_id(&self) -> dot::Id<'a> {
         let mut name: String = self.crate_name.clone();
-        name.retain(|e| e.is_ascii_alphanumeric());
+        name.retain(|e| e.is_ascii_alphanumeric() || e == '_');
         dot::Id::new(format!("error_propagation_{name}")).unwrap()
     }
 
@@ -62,10 +63,22 @@ impl<'a> dot::Labeller<'a, Node, Edge> for Graph {
     }
 
     fn edge_color(&'a self, e: &Edge) -> Option<LabelText<'a>> {
-        if e.propagates {
+        if e.is_error && e.propagates {
+            Some(LabelText::label("purple"))
+        } else if e.is_error {
+            Some(LabelText::label("red"))
+        } else if e.propagates {
             Some(LabelText::label("blue"))
         } else {
             None
+        }
+    }
+
+    fn edge_style(&'a self, e: &Edge) -> Style {
+        if e.is_error || e.propagates {
+            Style::None
+        } else {
+            Style::Dotted
         }
     }
 
@@ -206,6 +219,7 @@ impl Edge {
             call_id,
             ty: None,
             propagates,
+            is_error: false,
         }
     }
 }

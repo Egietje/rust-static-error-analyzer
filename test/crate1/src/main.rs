@@ -2,16 +2,27 @@ mod mod1;
 
 fn main() {
     propagate();
+    other();
 }
 
-fn result() -> Result<(), ()> {
+fn other() {}
+
+fn result() -> Result<(), MyError> {
     Ok(())
 }
 
-fn propagate() -> Result<(), ()> {
-    let x = result().map_err(|_| ())?;
+struct MyError;
 
-    let y = result().map_err(|_| ());
+impl From<MyError> for () {
+    fn from(value: MyError) -> Self {
+        ()
+    }
+}
+
+fn propagate() -> Result<(), ()> {
+    let x = result()?;
+
+    let y = result();
 
     let z = y?;
 

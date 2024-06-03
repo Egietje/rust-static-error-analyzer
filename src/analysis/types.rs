@@ -1,7 +1,7 @@
 use rustc_hir::def_id::DefId;
 use rustc_hir::HirId;
 use rustc_middle::mir::TerminatorKind;
-use rustc_middle::ty::{Interner, Ty, TyCtxt};
+use rustc_middle::ty::{GenericArg, Interner, Ty, TyCtxt};
 
 /// Get the return type of a called function.
 pub fn get_call_type(context: TyCtxt, call_id: HirId, caller_id: DefId, called_id: DefId) -> Ty {
@@ -33,14 +33,39 @@ fn get_call_type_using_mir(context: TyCtxt, call_id: HirId, caller_id: DefId) ->
             if let TerminatorKind::Call { func, fn_span, .. } = &terminator.kind {
                 if call_expr.span.hi() == fn_span.hi() {
                     if let Some((def_id, args)) = func.const_fn_def() {
-                        return Some(context
-                            .type_of_instantiated(def_id, args)
-                            .fn_sig(context)
-                            .output()
-                            .skip_binder()
+                        return Some(
+                            context
+                                .type_of_instantiated(def_id, args)
+                                .fn_sig(context)
+                                .output()
+                                .skip_binder(),
                         );
                     }
                 }
+            }
+        }
+    }
+
+    None
+}
+
+pub fn extract_result(ty: Ty) -> Option<GenericArg> {
+    for t in ty.walk() {
+        let format = format!("{t}");
+        if format.starts_with("std::result::Result<") && format.ends_with('>') {
+            return Some(t);
+        }
+    }
+
+    None
+}
+
+pub fn extract_error_from_result(ty: Ty) -> Option<String> {
+    if let Some(t) = extract_result(ty) {
+        for arg in t.walk() {
+            let f = format!("{arg}");
+            if format!("{t}").ends_with(&format!(", {f}>")) {
+                return Some(f);
             }
         }
     }

@@ -26,20 +26,10 @@ fn main() {
     let args = rustc_driver::args::raw_args(&early_dcx)
         .unwrap_or_else(|_| std::process::exit(rustc_driver::EXIT_FAILURE));
 
-    if args.len() < 3 {
-        eprintln!("Usage:");
-        eprintln!("static-result-analyzer.exe [input] [output]");
-        eprintln!();
-        eprintln!("Both paths should be relative.");
-        std::process::exit(rustc_driver::EXIT_FAILURE);
-    }
+    // Extract the arguments
+    let (relative_manifest_path, relative_output_path, remove_redundant) = extract_arguments(&args);
 
-    // Get the path to Cargo.toml
-    let relative_manifest_path = get_relative_manifest_path(&args);
     let manifest_path = get_manifest_path(&relative_manifest_path);
-
-    // Get the path to the output file
-    let relative_output_path = get_relative_output_path(&args);
     let output_path = get_output_path(&relative_output_path);
 
     // Extract the compiler arguments from running `cargo build`
@@ -59,11 +49,36 @@ fn main() {
     // Run the compiler using the retrieved args.
     let exit_code = run_compiler(
         compiler_args,
-        &mut AnalysisCallback(output_path),
+        &mut AnalysisCallback(output_path, remove_redundant),
         using_internal_features,
     );
 
     println!("Ran compiler, exit code: {exit_code}");
+}
+
+fn extract_arguments(args: &[String]) -> (String, String, bool) {
+    if args.len() < 3 {
+        eprintln!("Usage:");
+        eprintln!("static-result-analyzer.exe input output [keep]");
+        eprintln!();
+        eprintln!("Both the input and output path should be relative.");
+        eprintln!("The keep flag will keep all nodes/edges in the graph, effectively outputting a call graph. If not set, non-error calls are removed.");
+        std::process::exit(rustc_driver::EXIT_FAILURE);
+    }
+
+    (get_relative_manifest_path(args), get_relative_output_path(args), get_remove_redundant(args))
+}
+
+fn get_remove_redundant(args: &[String]) -> bool {
+    if args.len() < 4 {
+        true
+    } else {
+        if args.get(3).unwrap() == "keep" {
+            false
+        } else {
+            true
+        }
+    }
 }
 
 /// Get the full path to the manifest.
@@ -236,7 +251,7 @@ fn run_compiler(
     })
 }
 
-struct AnalysisCallback(PathBuf);
+struct AnalysisCallback(PathBuf, bool);
 
 impl rustc_driver::Callbacks for AnalysisCallback {
     fn after_crate_root_parsing<'tcx>(
@@ -248,7 +263,7 @@ impl rustc_driver::Callbacks for AnalysisCallback {
         queries.global_ctxt().unwrap().enter(|context| {
             println!("Analyzing output...");
             // Analyze the program using the type context
-            let graph = analysis::analyze(context);
+            let graph = analysis::analyze(context, self.1);
             let dot = graph.to_dot();
 
             println!("Writing graph...");

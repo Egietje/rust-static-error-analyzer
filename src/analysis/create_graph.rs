@@ -195,6 +195,8 @@ fn get_function_calls_in_expression(
                     for (kind, id, add_edge, _) in get_function_calls_in_expression(context, exp) {
                         res.push((kind, id, add_edge, true));
                     }
+
+                    return res;
                 }
                 _ => {
                     res.extend(get_function_calls_in_expression(context, exp));
