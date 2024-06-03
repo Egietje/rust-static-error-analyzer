@@ -6,22 +6,20 @@ use rustc_middle::ty::TyCtxt;
 
 /// Analysis steps:
 ///
-/// Step 1: Create call graph (directional)
-/// Step 1.1: Node for each function (store def id and/or body id)
+/// Step 1: Create call graph
+/// Step 1.1: Node for each function
 /// Step 1.2: Edge for each function call
+/// Step 1.3: Add function call information (e.g. whether it propagates using the try op)
 ///
-/// Step 2: Attach return type info to functions in call graph (only if it's of type Result?)
-/// Step 2.1: Loop over each function/node in call graph
-/// Step 2.2: Label incoming edges of this node (e.g. calls to this function) with return type retrieved using def id
+/// Step 2: Attach return type info to functions in call graph
+/// Step 2.1: Loop over each edge in call graph
+/// Step 2.2: Label edge with type info extracted from MIR
 ///
-/// Step 3: Investigate functions that call error functions (whether it handles or propagates)
-/// Step 3.1: Basic version: if calls error function and returns error, assume propagates
-/// Step 3.2: Basic version: if calls error function and doesn't return error, assume handles
-/// Step 3.3: Advanced version: not sure
+/// Step 3: TODO: Attach panic info to functions in call graph
 ///
-/// Step 4: Attach panic info to functions in call graph
+/// Step 4: Remove functions that don't error/panic from graph
 ///
-/// Step 5: Remove functions that don't error/panic from graph
+/// Step 5: TODO Format the output graph to show individual propagation chains
 pub fn analyze(context: TyCtxt, remove_redundant: bool) -> Graph {
     // Get the entry point of the program
     let entry_node = get_entry_node(context);
@@ -31,34 +29,29 @@ pub fn analyze(context: TyCtxt, remove_redundant: bool) -> Graph {
 
     // Attach return type info
     for edge in &mut graph.edges {
-        let ret_ty = types::get_call_type(
+        let (ty, error) = types::get_error_or_type(
             context,
             edge.call_id,
             graph.nodes[edge.from].kind.def_id(),
             graph.nodes[edge.to].kind.def_id(),
         );
-        let res = types::extract_error_from_result(ret_ty);
-        if res.is_some() {
-            edge.ty = res;
-            edge.is_error = true;
-        } else {
-            edge.ty = Some(format!("{ret_ty}"));
-        }
+        edge.ty = Some(ty);
+        edge.is_error = error;
     }
+
+    // TODO: Attach panic info
 
     // Remove redundant nodes/edges
     if remove_redundant {
         for i in (0..graph.edges.len()).rev() {
             let edge = &graph.edges[i];
-            if !edge.is_error
-                && !graph.nodes[edge.to].panics
-            {
+            if !edge.is_error && !graph.nodes[edge.to].panics {
                 graph.edges.remove(i);
             }
         }
     }
 
-    // TODO: Format output graph properly
+    // TODO: Format output graph
 
     graph
 }

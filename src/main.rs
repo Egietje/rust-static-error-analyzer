@@ -56,6 +56,7 @@ fn main() {
     println!("Ran compiler, exit code: {exit_code}");
 }
 
+/// Extract the needed arguments from the provided arguments
 fn extract_arguments(args: &[String]) -> (String, String, bool) {
     if args.len() < 3 {
         eprintln!("Usage:");
@@ -66,18 +67,19 @@ fn extract_arguments(args: &[String]) -> (String, String, bool) {
         std::process::exit(rustc_driver::EXIT_FAILURE);
     }
 
-    (get_relative_manifest_path(args), get_relative_output_path(args), get_remove_redundant(args))
+    (
+        get_relative_manifest_path(args),
+        get_relative_output_path(args),
+        get_remove_redundant(args),
+    )
 }
 
+/// Get whether the keep flag was set
 fn get_remove_redundant(args: &[String]) -> bool {
     if args.len() < 4 {
         true
     } else {
-        if args.get(3).unwrap() == "keep" {
-            false
-        } else {
-            true
-        }
+        args.get(3).unwrap() != "keep"
     }
 }
 
@@ -89,7 +91,10 @@ fn get_output_path(output_path: &str) -> PathBuf {
 /// Get the relative path to the output file from the current dir.
 fn get_relative_output_path(args: &[String]) -> String {
     let arg = args.get(2).unwrap();
-    if arg.ends_with(".dot") {
+    if Path::new(arg)
+        .extension()
+        .map_or(false, |ext| ext.eq_ignore_ascii_case("dot"))
+    {
         arg.clone()
     } else {
         String::from("output.dot")
@@ -269,14 +274,14 @@ impl rustc_driver::Callbacks for AnalysisCallback {
             println!("Writing graph...");
 
             match std::fs::write(&self.0, dot.clone()) {
-                Ok(_) => {
+                Ok(()) => {
                     println!("Done!");
                 }
                 Err(e) => {
                     eprintln!("Could not write output!");
-                    eprintln!("{}", e);
+                    eprintln!("{e}");
                     eprintln!();
-                    println!("{}", dot);
+                    println!("{dot}");
                 }
             }
         });

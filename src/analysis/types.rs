@@ -4,7 +4,8 @@ use rustc_middle::mir::TerminatorKind;
 use rustc_middle::ty::{GenericArg, Interner, Ty, TyCtxt};
 
 /// Get the return type of a called function.
-pub fn get_call_type(context: TyCtxt, call_id: HirId, caller_id: DefId, called_id: DefId) -> Ty {
+#[allow(clippy::similar_names)]
+fn get_call_type(context: TyCtxt, call_id: HirId, caller_id: DefId, called_id: DefId) -> Ty {
     if let Some(ty) = get_call_type_using_mir(context, call_id, caller_id) {
         ty
     } else {
@@ -49,7 +50,27 @@ fn get_call_type_using_mir(context: TyCtxt, call_id: HirId, caller_id: DefId) ->
     None
 }
 
-pub fn extract_result(ty: Ty) -> Option<GenericArg> {
+/// Extract the error type from Result, or return the full type if it doesn't contain a Result (along with a flag of whether it is an extract error).
+#[allow(clippy::similar_names)]
+pub fn get_error_or_type(
+    context: TyCtxt,
+    call_id: HirId,
+    caller_id: DefId,
+    called_id: DefId,
+) -> (String, bool) {
+    let ret_ty = get_call_type(context, call_id, caller_id, called_id);
+
+    let res = extract_error_from_result(ret_ty);
+
+    if let Some(ty) = res {
+        (ty, true)
+    } else {
+        (format!("{ret_ty}"), false)
+    }
+}
+
+/// Extract the Result type from any type.
+fn extract_result(ty: Ty) -> Option<GenericArg> {
     for t in ty.walk() {
         let format = format!("{t}");
         if format.starts_with("std::result::Result<") && format.ends_with('>') {
@@ -60,7 +81,8 @@ pub fn extract_result(ty: Ty) -> Option<GenericArg> {
     None
 }
 
-pub fn extract_error_from_result(ty: Ty) -> Option<String> {
+/// Extract the error from a Result type.
+fn extract_error_from_result(ty: Ty) -> Option<String> {
     if let Some(t) = extract_result(ty) {
         for arg in t.walk() {
             let f = format!("{arg}");
