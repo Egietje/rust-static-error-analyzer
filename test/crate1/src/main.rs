@@ -1,8 +1,10 @@
 mod mod1;
 
-async fn main() {
-    let x = result().await;
-    other().await;
+fn main() {
+    async {
+        let x = result().await;
+        other().await;
+    };
 }
 
 async fn result() -> Result<(), MyError> {
