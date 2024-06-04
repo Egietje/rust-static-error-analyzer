@@ -14,6 +14,7 @@ use rustc_driver::Compilation;
 use rustc_interface::interface::Compiler;
 use rustc_interface::Queries;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use toml::Table;
 
 /// Entry point, first sets up the compiler, and then runs it using the provided arguments.
@@ -35,6 +36,8 @@ fn main() {
     // Extract the compiler arguments from running `cargo build`
     let compiler_args = get_compiler_args(&relative_manifest_path, &manifest_path)
         .expect("Could not get arguments from cargo build!");
+
+    println!("{:?}", compiler_args);
 
     // Enable CTRL + C
     rustc_driver::install_ctrlc_handler();
@@ -86,6 +89,8 @@ fn get_manifest_path(cargo_path: &str) -> PathBuf {
 
 /// Get the compiler arguments used to compile the package by first running `cargo clean` and then `cargo build -vv`.
 fn get_compiler_args(relative_manifest_path: &str, manifest_path: &PathBuf) -> Option<Vec<String>> {
+    println!("Using {}!", cargo_version().trim_end_matches('\n'));
+
     cargo_clean(manifest_path);
 
     let build_output = cargo_build_verbose(manifest_path);
@@ -162,7 +167,7 @@ fn split_args(relative_manifest_path: &str, command: &str) -> Vec<String> {
 /// Run `cargo clean -p PACKAGE`, where the package name is extracted from the given manifest.
 fn cargo_clean(manifest_path: &PathBuf) -> String {
     println!("Cleaning package...");
-    let mut clean_command = std::process::Command::new("cargo");
+    let mut clean_command = create_cargo_command();
     clean_command.arg("clean");
     clean_command.arg("-p");
     clean_command.arg(get_package_name(manifest_path));
@@ -203,11 +208,33 @@ fn get_package_name(manifest_path: &PathBuf) -> String {
     package_name
 }
 
+/// Create a new cargo command.
+fn create_cargo_command() -> Command {
+    let mut command = Command::new("cargo");
+    command.arg("+stable");
+
+    command
+}
+
+/// Run `cargo --version`.
+fn cargo_version() -> String {
+    let mut version_command = create_cargo_command();
+    version_command.arg("--version");
+
+    let output = version_command
+        .output()
+        .expect("Could not get cargo version!");
+
+    let stdout = String::from_utf8(output.stdout).expect("Invalid UTF8!");
+
+    stdout
+}
+
 /// Run `cargo build -v` on the given manifest.
 fn cargo_build_verbose(manifest_path: &Path) -> String {
     // TODO: interrupt build as to not compile the program twice
     println!("Building package...");
-    let mut build_command = std::process::Command::new("cargo");
+    let mut build_command = create_cargo_command();
     build_command.arg("build");
     build_command.arg("-v");
     build_command.arg("--manifest-path");
@@ -220,12 +247,8 @@ fn cargo_build_verbose(manifest_path: &Path) -> String {
     if output.status.code() != Some(0) {
         eprintln!("Could not build package!");
         eprintln!();
-        let mut print = false;
         for line in stderr.split('\n') {
-            if line.starts_with("error:") {
-                print = true;
-            }
-            if print {
+            if line.starts_with("error") {
                 eprintln!("{}", line);
             }
         }
