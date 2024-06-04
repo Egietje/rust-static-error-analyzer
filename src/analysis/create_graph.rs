@@ -218,7 +218,7 @@ fn get_function_calls_in_expression(
             res.push((node_kind, expr.hir_id, false, false));
         }
         ExprKind::ConstBlock(block) => {
-            let node = context.hir_node(block.body.hir_id);
+            let node = context.hir_node(block.hir_id);
             res.extend(get_function_calls_in_block(context, node.expect_block()));
         }
         ExprKind::Array(args) | ExprKind::Tup(args) => {

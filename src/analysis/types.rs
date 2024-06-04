@@ -1,7 +1,7 @@
 use rustc_hir::def_id::DefId;
 use rustc_hir::HirId;
 use rustc_middle::mir::TerminatorKind;
-use rustc_middle::ty::{GenericArg, Interner, Ty, TyCtxt};
+use rustc_middle::ty::{GenericArg, Interner, Ty, TyCtxt, TyKind};
 
 /// Get the return type of a called function.
 #[allow(clippy::similar_names)]
@@ -13,10 +13,18 @@ fn get_call_type(context: TyCtxt, call_id: HirId, caller_id: DefId, called_id: D
     }
 }
 
-/// Extracts the return type of a called function using just the functions `DefId`.
+/// Extracts the return type of a called function using just the function's `DefId`.
 /// Should always succeed.
 fn get_call_type_using_context(context: TyCtxt, called_id: DefId) -> Ty {
-    context.type_of(called_id).skip_binder()
+    if context.type_of(called_id).instantiate_identity().is_fn() {
+        context
+            .fn_sig(called_id)
+            .instantiate_identity()
+            .output()
+            .skip_binder()
+    } else {
+        context.type_of(called_id).instantiate_identity()
+    }
 }
 
 /// Extracts the return type of a called function using its call's `HirId`, as well as the caller's `DefId`.
@@ -60,21 +68,45 @@ pub fn get_error_or_type(
 ) -> (String, bool) {
     let ret_ty = get_call_type(context, call_id, caller_id, called_id);
 
-    let res = extract_error_from_result(ret_ty);
-
-    if let Some(ty) = res {
-        (ty, true)
+    let result = if context.ty_is_opaque_future(ret_ty) {
+        extract_result_from_future(context, ret_ty)
     } else {
-        (format!("{ret_ty}"), false)
-    }
+        extract_result(ret_ty)
+    };
+
+    let res = extract_error_from_result(result);
+
+    (res.clone().unwrap_or(format!("{ret_ty}")), res.is_some())
 }
 
 /// Extract the Result type from any type.
 fn extract_result(ty: Ty) -> Option<GenericArg> {
-    for t in ty.walk() {
-        let format = format!("{t}");
+    for arg in ty.walk() {
+        let format = format!("{arg}");
         if format.starts_with("std::result::Result<") && format.ends_with('>') {
-            return Some(t);
+            return Some(arg);
+        }
+    }
+
+    None
+}
+
+/// Extract the Result type from any future.
+fn extract_result_from_future<'a>(context: TyCtxt<'a>, ty: Ty<'a>) -> Option<GenericArg<'a>> {
+    for t in ty.walk() {
+        if let Some(typ) = t.as_type() {
+            if let TyKind::Alias(_kind, alias) = typ.kind() {
+                if let TyKind::Coroutine(_def_id, args) =
+                    context.type_of(alias.def_id).instantiate_identity().kind()
+                {
+                    for arg in *args {
+                        let format = format!("{arg}");
+                        if format.starts_with("std::result::Result<") && format.ends_with('>') {
+                            return Some(arg);
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -82,13 +114,12 @@ fn extract_result(ty: Ty) -> Option<GenericArg> {
 }
 
 /// Extract the error from a Result type.
-fn extract_error_from_result(ty: Ty) -> Option<String> {
-    if let Some(t) = extract_result(ty) {
-        for arg in t.walk() {
-            let f = format!("{arg}");
-            if format!("{t}").ends_with(&format!(", {f}>")) {
-                return Some(f);
-            }
+fn extract_error_from_result(opt: Option<GenericArg>) -> Option<String> {
+    let t = opt?;
+    for arg in t.walk() {
+        let f = format!("{arg}");
+        if format!("{t}").ends_with(&format!(", {f}>")) {
+            return Some(f);
         }
     }
 

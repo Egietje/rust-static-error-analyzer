@@ -68,19 +68,10 @@ fn extract_arguments(args: &[String]) -> (String, String, bool) {
     }
 
     (
-        get_relative_manifest_path(args),
-        get_relative_output_path(args),
-        get_remove_redundant(args),
+        args.get(1).unwrap().clone(),
+        args.get(2).unwrap().clone(),
+        !args.get(3).is_some_and(|arg| arg == "keep"),
     )
-}
-
-/// Get whether the keep flag was set
-fn get_remove_redundant(args: &[String]) -> bool {
-    if args.len() < 4 {
-        true
-    } else {
-        args.get(3).unwrap() != "keep"
-    }
 }
 
 /// Get the full path to the manifest.
@@ -88,32 +79,9 @@ fn get_output_path(output_path: &str) -> PathBuf {
     std::env::current_dir().unwrap().join(output_path)
 }
 
-/// Get the relative path to the output file from the current dir.
-fn get_relative_output_path(args: &[String]) -> String {
-    let arg = args.get(2).unwrap();
-    if Path::new(arg)
-        .extension()
-        .map_or(false, |ext| ext.eq_ignore_ascii_case("dot"))
-    {
-        arg.clone()
-    } else {
-        String::from("output.dot")
-    }
-}
-
 /// Get the full path to the manifest.
 fn get_manifest_path(cargo_path: &str) -> PathBuf {
     std::env::current_dir().unwrap().join(cargo_path)
-}
-
-/// Get the relative path to the manifest from the current dir.
-fn get_relative_manifest_path(args: &[String]) -> String {
-    let arg = args.get(1).unwrap();
-    if arg.ends_with("Cargo.toml") {
-        arg.clone()
-    } else {
-        String::from("Cargo.toml")
-    }
 }
 
 /// Get the compiler arguments used to compile the package by first running `cargo clean` and then `cargo build -vv`.
@@ -276,6 +244,7 @@ impl rustc_driver::Callbacks for AnalysisCallback {
             match std::fs::write(&self.0, dot.clone()) {
                 Ok(()) => {
                     println!("Done!");
+                    println!("Wrote to {}", &self.0.display());
                 }
                 Err(e) => {
                     eprintln!("Could not write output!");
