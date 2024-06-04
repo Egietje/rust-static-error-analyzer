@@ -65,7 +65,7 @@ fn add_calls_from_function(
 /// Retrieve all function calls within a block, and add the nodes and edges to the graph.
 fn add_calls_from_block(context: TyCtxt, from: usize, block: &Block, mut graph: Graph) -> Graph {
     // Get the function calls from within this block
-    let calls = get_function_calls_in_block(context, block);
+    let calls = get_function_calls_in_block(context, block, true);
 
     // Add edges for all function calls
     for (node_kind, call_id, add_edge, propagates) in calls {
@@ -113,12 +113,21 @@ fn add_calls_from_block(context: TyCtxt, from: usize, block: &Block, mut graph: 
 fn get_function_calls_in_block(
     context: TyCtxt,
     block: &Block,
+    is_fn: bool,
 ) -> Vec<(NodeKind, HirId, bool, bool)> {
     let mut res: Vec<(NodeKind, HirId, bool, bool)> = vec![];
 
     // If the block has an ending expression add calls from there
+    // If this block is that of a function, this is a return statement
     if let Some(exp) = block.expr {
-        res.extend(get_function_calls_in_expression(context, exp));
+
+        if is_fn {
+            for (kind, id, add_edge, _) in get_function_calls_in_expression(context, exp) {
+                res.push((kind, id, add_edge, true));
+            }
+        } else {
+            res.extend(get_function_calls_in_expression(context, exp));
+        }
     }
 
     // Go over all statements in the block
@@ -219,7 +228,7 @@ fn get_function_calls_in_expression(
         }
         ExprKind::ConstBlock(block) => {
             let node = context.hir_node(block.hir_id);
-            res.extend(get_function_calls_in_block(context, node.expect_block()));
+            res.extend(get_function_calls_in_block(context, node.expect_block(), false));
         }
         ExprKind::Array(args) | ExprKind::Tup(args) => {
             for exp in args {
@@ -253,10 +262,10 @@ fn get_function_calls_in_expression(
             }
         }
         ExprKind::Loop(block, _lbl, _src, _span) => {
-            res.extend(get_function_calls_in_block(context, block));
+            res.extend(get_function_calls_in_block(context, block, false));
         }
         ExprKind::Block(block, _lbl) => {
-            res.extend(get_function_calls_in_block(context, block));
+            res.extend(get_function_calls_in_block(context, block, false));
         }
         ExprKind::Assign(a, b, _span) => {
             res.extend(get_function_calls_in_expression(context, a));
@@ -291,7 +300,9 @@ fn get_function_calls_in_expression(
         }
         ExprKind::Ret(opt) => {
             if let Some(exp) = opt {
-                res.extend(get_function_calls_in_expression(context, exp));
+                for (kind, id, add_edge, _) in get_function_calls_in_expression(context, exp) {
+                    res.push((kind, id, add_edge, true));
+                }
             }
         }
         ExprKind::InlineAsm(_asm) => {
