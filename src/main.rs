@@ -112,12 +112,30 @@ fn split_args(relative_manifest_path: &str, command: &str) -> Vec<String> {
         }
 
         // Leave ' ' when enclosed in '"', removing the enclosing '"'
-        if arg.ends_with('"') {
-            temp.push_str(arg.trim_end_matches('"'));
+        if arg.starts_with('"') && arg.ends_with('"') {
+            temp.push_str(
+                arg.strip_prefix('"')
+                    .expect("Could not remove '\"' from start of string!")
+                    .strip_suffix('"')
+                    .expect("Could not remove '\"' from end of string!"),
+            );
             res.push(temp);
             temp = String::new();
-        } else if arg.starts_with('"') || !temp.is_empty() {
-            temp.push_str(arg.trim_start_matches('"'));
+        } else if arg.ends_with('"') {
+            temp.push_str(
+                arg.strip_suffix('"')
+                    .expect("Could not remove '\"' from end of string!"),
+            );
+            res.push(temp);
+            temp = String::new();
+        } else if arg.starts_with('"') {
+            temp.push_str(
+                arg.strip_prefix('"')
+                    .expect("Could not remove '\"' from start of string!"),
+            );
+            temp.push(' ');
+        } else if !temp.is_empty() {
+            temp.push_str(&arg);
             temp.push(' ');
         } else {
             res.push(arg);
@@ -129,6 +147,7 @@ fn split_args(relative_manifest_path: &str, command: &str) -> Vec<String> {
         if i >= res.len() {
             break;
         }
+        res[i] = res[i].replace("\\\"", "\"");
         if res[i].starts_with("--error-format=") {
             res[i] = String::from("--error-format=short");
         }
@@ -156,7 +175,15 @@ fn cargo_clean(manifest_path: &PathBuf) -> String {
 
     let output = clean_command.output().expect("Could not clean!");
 
-    String::from_utf8(output.stderr).expect("Invalid UTF8!")
+    let stderr = String::from_utf8(output.stderr).expect("Invalid UTF8!");
+
+    if output.status.code() != Some(0) {
+        eprintln!("Could not clean package!");
+        println!("{:?}", stderr);
+        std::process::exit(1);
+    }
+
+    stderr
 }
 
 /// Extract the package name from the given manifest.
@@ -176,30 +203,49 @@ fn get_package_name(manifest_path: &PathBuf) -> String {
     package_name
 }
 
-/// Run `cargo build -vv` on the given manifest.
+/// Run `cargo build -v` on the given manifest.
 fn cargo_build_verbose(manifest_path: &Path) -> String {
     // TODO: interrupt build as to not compile the program twice
     println!("Building package...");
     let mut build_command = std::process::Command::new("cargo");
     build_command.arg("build");
-    build_command.arg("-vv");
+    build_command.arg("-v");
     build_command.arg("--manifest-path");
     build_command.arg(manifest_path.as_os_str());
 
     let output = build_command.output().expect("Could not build!");
 
-    String::from_utf8(output.stderr).expect("Invalid UTF8!")
+    let stderr = String::from_utf8(output.stderr).expect("Invalid UTF8!");
+
+    if output.status.code() != Some(0) {
+        eprintln!("Could not build package!");
+        eprintln!();
+        let mut print = false;
+        for line in stderr.split('\n') {
+            if line.starts_with("error:") {
+                print = true;
+            }
+            if print {
+                eprintln!("{}", line);
+            }
+        }
+        std::process::exit(1);
+    }
+
+    stderr
 }
 
 /// Gets the rustc invocation command from the output of `cargo build -vv`.
 fn get_rustc_invocation(build_output: &str) -> Option<String> {
     for line in build_output.split('\n') {
-        for command in line.split("&& ") {
-            if command.contains("rustc")
-                && command.contains("--crate-type bin")
-                && command.contains("main.rs")
-            {
-                return Some(String::from(command.trim_end_matches('`')));
+        for part in line.split('`') {
+            for command in part.split("&& ") {
+                if command.contains("rustc")
+                    && command.contains("--crate-type bin")
+                    && command.contains("main.rs")
+                {
+                    return Some(String::from(command));
+                }
             }
         }
     }
