@@ -69,8 +69,11 @@ set keep=keep
 goto after_keep
 
 
+
 :after_keep
 :: Run the analyzer
+echo Building and running analyzer!
+
 cd static-result-analyzer
 cargo +%toolchain% run -- ../%input% ../%output% %keep%
 

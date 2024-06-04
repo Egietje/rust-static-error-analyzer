@@ -37,8 +37,6 @@ fn main() {
     let compiler_args = get_compiler_args(&relative_manifest_path, &manifest_path)
         .expect("Could not get arguments from cargo build!");
 
-    println!("{:?}", compiler_args);
-
     // Enable CTRL + C
     rustc_driver::install_ctrlc_handler();
 
@@ -185,7 +183,6 @@ fn cargo_clean(manifest_path: &PathBuf) -> String {
     if output.status.code() != Some(0) {
         eprintln!("Could not clean package!");
         println!("{:?}", stderr);
-        std::process::exit(1);
     }
 
     stderr
@@ -210,8 +207,7 @@ fn get_package_name(manifest_path: &PathBuf) -> String {
 
 /// Create a new cargo command.
 fn create_cargo_command() -> Command {
-    let mut command = Command::new("cargo");
-    command.arg("+stable");
+    let command = Command::new("cargo");
 
     command
 }
@@ -245,14 +241,15 @@ fn cargo_build_verbose(manifest_path: &Path) -> String {
     let stderr = String::from_utf8(output.stderr).expect("Invalid UTF8!");
 
     if output.status.code() != Some(0) {
-        eprintln!("Could not build package!");
+        eprintln!("Could not (fully) build package!");
         eprintln!();
         for line in stderr.split('\n') {
             if line.starts_with("error") {
                 eprintln!("{}", line);
             }
         }
-        std::process::exit(1);
+        eprintln!();
+        eprintln!("Trying to continue...");
     }
 
     stderr
