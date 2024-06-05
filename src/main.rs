@@ -265,7 +265,6 @@ fn get_rustc_invocation(build_output: &str, package_name: &str) -> Option<String
                 if command.contains("rustc")
                     && command.contains("--crate-type bin")
                     && command.contains(&format!("--crate-name {}", package_name.replace('-', "_")))
-                    && command.contains("main.rs")
                 {
                     return Some(String::from(command));
                 }
