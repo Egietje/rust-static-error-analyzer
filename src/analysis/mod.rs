@@ -41,7 +41,7 @@ pub fn analyze(context: TyCtxt) -> (CallGraph, ChainGraph) {
     }
 
     // Parse graph to show chains
-    let chain_graph = calls_to_chains::format(&call_graph);
+    let chain_graph = calls_to_chains::to_chains(&call_graph);
 
     (call_graph, chain_graph)
 }

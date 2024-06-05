@@ -1,11 +1,7 @@
 use crate::graph::{CallEdge, CallGraph, ChainGraph};
 use std::collections::HashMap;
 
-pub fn format(graph: &CallGraph) -> ChainGraph {
-    split_chains(graph)
-}
-
-fn split_chains(graph: &CallGraph) -> ChainGraph {
+pub fn to_chains(graph: &CallGraph) -> ChainGraph {
     let mut new_graph = ChainGraph::new(graph.crate_name.clone());
 
     // Loop over all nodes (e.g. functions)
@@ -13,7 +9,12 @@ fn split_chains(graph: &CallGraph) -> ChainGraph {
         // Start of a chain
         if edge.is_error && !edge.propagates {
             let mut node_map: HashMap<usize, usize> = HashMap::new();
-            for call in get_chain_from_edge(graph, edge) {
+
+            let mut calls = get_chain_from_edge(graph, edge);
+            calls.push(edge.clone());
+
+            for call in calls {
+                // If we've already added the node to the new graph, refer to that, otherwise, add a new node
                 let from = if node_map.contains_key(&call.from) {
                     node_map.get(&call.from).unwrap().clone()
                 } else {
@@ -22,6 +23,7 @@ fn split_chains(graph: &CallGraph) -> ChainGraph {
                     id
                 };
 
+                // Ditto
                 let to = if node_map.contains_key(&call.to) {
                     node_map.get(&call.to).unwrap().clone()
                 } else {
@@ -30,6 +32,7 @@ fn split_chains(graph: &CallGraph) -> ChainGraph {
                     id
                 };
 
+                // Add the edge
                 new_graph.add_edge(from, to, call.ty);
             }
         }
@@ -41,11 +44,18 @@ fn split_chains(graph: &CallGraph) -> ChainGraph {
 fn get_chain_from_edge(graph: &CallGraph, from: &CallEdge) -> Vec<CallEdge> {
     let mut res: Vec<CallEdge> = vec![];
 
-    res.push(from.clone());
-
+    // Add all outgoing propagating error edges from the 'to' node to the list
+    // And do the same once for each node this edge calls to
     for edge in graph.get_outgoing_edges(from.to) {
         if edge.is_error && edge.propagates {
-            res.extend(get_chain_from_edge(graph, edge));
+            if !res.contains(edge) {
+                // If we haven't had this edge yet, explore the node
+                res.push(edge.clone());
+                res.extend(get_chain_from_edge(graph, edge));
+            } else {
+                // Otherwise just add the edge
+                res.push(edge.clone());
+            }
         }
     }
 
