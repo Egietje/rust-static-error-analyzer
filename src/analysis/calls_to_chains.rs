@@ -1,4 +1,5 @@
-use crate::graph::{ChainGraph, CallEdge, CallGraph};
+use crate::graph::{CallEdge, CallGraph, ChainGraph};
+use std::collections::HashMap;
 
 pub fn format(graph: &CallGraph) -> ChainGraph {
     split_chains(graph)
@@ -11,13 +12,25 @@ fn split_chains(graph: &CallGraph) -> ChainGraph {
     for edge in &graph.edges {
         // Start of a chain
         if edge.is_error && !edge.propagates {
-            for chain in find_chains(graph, edge) {
-                let mut prev = new_graph.add_node(graph.nodes[edge.from].label.clone());
-                for chain_edge in chain {
-                    let new = new_graph.add_node(graph.nodes[chain_edge.to].label.clone());
-                    new_graph.add_edge(prev, new, chain_edge.ty);
-                    prev = new;
-                }
+            let mut node_map: HashMap<usize, usize> = HashMap::new();
+            for call in get_chain_from_edge(graph, edge) {
+                let from = if node_map.contains_key(&call.from) {
+                    node_map.get(&call.from).unwrap().clone()
+                } else {
+                    let id = new_graph.add_node(graph.nodes[call.from].label.clone());
+                    node_map.insert(call.from, id);
+                    id
+                };
+
+                let to = if node_map.contains_key(&call.to) {
+                    node_map.get(&call.to).unwrap().clone()
+                } else {
+                    let id = new_graph.add_node(graph.nodes[call.to].label.clone());
+                    node_map.insert(call.to, id);
+                    id
+                };
+
+                new_graph.add_edge(from, to, call.ty);
             }
         }
     }
@@ -25,23 +38,15 @@ fn split_chains(graph: &CallGraph) -> ChainGraph {
     new_graph
 }
 
-fn find_chains(graph: &CallGraph, start_edge: &CallEdge) -> Vec<Vec<CallEdge>> {
-    let mut res: Vec<Vec<CallEdge>> = vec![];
+fn get_chain_from_edge(graph: &CallGraph, from: &CallEdge) -> Vec<CallEdge> {
+    let mut res: Vec<CallEdge> = vec![];
 
-    for edge in graph.get_outgoing_edges(start_edge.to) {
+    res.push(from.clone());
+
+    for edge in graph.get_outgoing_edges(from.to) {
         if edge.is_error && edge.propagates {
-            let vec = vec![start_edge.clone()];
-            let chains = find_chains(graph, edge);
-            for chain in chains {
-                let mut new = vec.clone();
-                new.extend(chain);
-                res.push(new);
-            }
+            res.extend(get_chain_from_edge(graph, edge));
         }
-    }
-
-    if res.is_empty() {
-        res.push(vec![start_edge.clone()]);
     }
 
     res

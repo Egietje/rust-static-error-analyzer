@@ -64,7 +64,9 @@ fn extract_arguments(args: &[String]) -> (String, String, bool) {
         eprintln!("static-result-analyzer.exe input output [--call]");
         eprintln!();
         eprintln!("Both the input and output path should be relative.");
-        eprintln!("The call flag will output the call graph instead of the error chain graph if set.");
+        eprintln!(
+            "The call flag will output the call graph instead of the error chain graph if set."
+        );
         std::process::exit(rustc_driver::EXIT_FAILURE);
     }
 
@@ -278,7 +280,9 @@ fn get_rustc_invocation(
     package_name: &str,
     bin_name: Option<String>,
 ) -> Option<String> {
-    let name = bin_name.unwrap_or(package_name.to_owned()).replace('-', "_");
+    let name = bin_name
+        .unwrap_or(package_name.to_owned())
+        .replace('-', "_");
     for line in build_output.split('\n') {
         for part in line.split('`') {
             for command in part.split("&& ") {

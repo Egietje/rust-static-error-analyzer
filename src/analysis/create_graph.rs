@@ -63,7 +63,12 @@ fn add_calls_from_function(
 }
 
 /// Retrieve all function calls within a block, and add the nodes and edges to the graph.
-fn add_calls_from_block(context: TyCtxt, from: usize, block: &Block, mut graph: CallGraph) -> CallGraph {
+fn add_calls_from_block(
+    context: TyCtxt,
+    from: usize,
+    block: &Block,
+    mut graph: CallGraph,
+) -> CallGraph {
     // Get the function calls from within this block
     let calls = get_function_calls_in_block(context, block, true);
 
@@ -343,7 +348,10 @@ fn get_function_calls_in_expression(
 }
 
 /// Retrieve a vec of all function calls made from within a pattern (although I think it can never contain one).
-fn get_function_calls_in_pattern(context: TyCtxt, pat: &Pat) -> Vec<(CallNodeKind, HirId, bool, bool)> {
+fn get_function_calls_in_pattern(
+    context: TyCtxt,
+    pat: &Pat,
+) -> Vec<(CallNodeKind, HirId, bool, bool)> {
     let mut res: Vec<(CallNodeKind, HirId, bool, bool)> = vec![];
 
     match pat.kind {

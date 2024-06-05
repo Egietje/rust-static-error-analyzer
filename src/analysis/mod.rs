@@ -1,8 +1,8 @@
-mod create_graph;
 mod calls_to_chains;
+mod create_graph;
 mod types;
 
-use crate::graph::{ChainGraph, CallGraph};
+use crate::graph::{CallGraph, ChainGraph};
 use rustc_middle::ty::TyCtxt;
 
 /// Analysis steps:
@@ -25,7 +25,8 @@ pub fn analyze(context: TyCtxt) -> (CallGraph, ChainGraph) {
     let entry_node = get_entry_node(context);
 
     // Create call graph
-    let mut call_graph = create_graph::create_call_graph_from_root(context, entry_node.expect_item());
+    let mut call_graph =
+        create_graph::create_call_graph_from_root(context, entry_node.expect_item());
 
     // Attach return type info
     for edge in &mut call_graph.edges {
