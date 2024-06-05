@@ -278,7 +278,7 @@ fn get_rustc_invocation(
     package_name: &str,
     bin_name: Option<String>,
 ) -> Option<String> {
-    let name = bin_name.unwrap_or(package_name.to_owned());
+    let name = bin_name.unwrap_or(package_name.to_owned()).replace('-', "_");
     for line in build_output.split('\n') {
         for part in line.split('`') {
             for command in part.split("&& ") {
