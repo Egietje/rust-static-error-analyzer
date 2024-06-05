@@ -362,21 +362,14 @@ impl ChainGraph {
 impl ChainNode {
     /// Create a new node.
     fn new(id: usize, label: String) -> Self {
-        ChainNode {
-            id,
-            label,
-        }
+        ChainNode { id, label }
     }
 }
 
 impl ChainEdge {
     /// Create a new edge.
     pub fn new(from: usize, to: usize, label: Option<String>) -> Self {
-        ChainEdge {
-            from,
-            to,
-            label,
-        }
+        ChainEdge { from, to, label }
     }
 }
 

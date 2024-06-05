@@ -2,7 +2,7 @@ mod create_graph;
 mod format_graph;
 mod types;
 
-use crate::graph::Graph;
+use crate::graph::{ChainGraph, Graph};
 use rustc_middle::ty::TyCtxt;
 
 /// Analysis steps:
@@ -19,10 +19,8 @@ use rustc_middle::ty::TyCtxt;
 /// Step 3: Attach panic info to functions in call graph
 /// NOTE: skipped due to lack of time
 ///
-/// Step 4: Remove functions that don't error/panic from graph
-///
-/// Step 5: Format the output graph to show individual propagation chains
-pub fn analyze(context: TyCtxt, remove_redundant: bool) -> Graph {
+/// Step 4: Parse the output graph to show individual propagation chains
+pub fn analyze(context: TyCtxt) -> (Graph, ChainGraph) {
     // Get the entry point of the program
     let entry_node = get_entry_node(context);
 
@@ -41,23 +39,11 @@ pub fn analyze(context: TyCtxt, remove_redundant: bool) -> Graph {
         edge.is_error = error;
     }
 
-    // Remove redundant nodes/edges
-    if remove_redundant {
-        for i in (0..graph.edges.len()).rev() {
-            let edge = &graph.edges[i];
-            if !edge.is_error && !graph.nodes[edge.to].panics {
-                graph.edges.remove(i);
-            }
-        }
-    }
-
     // Format graph
-    if remove_redundant {
-        let formatted = format_graph::format(&graph);
-        println!("{}", formatted.to_dot());
-    }
+    let formatted = format_graph::format(&graph);
+    println!("{}", formatted.to_dot());
 
-    graph
+    (graph, formatted)
 }
 
 /// Retrieve the entry node (aka main function) from the type context.

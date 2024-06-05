@@ -205,7 +205,13 @@ fn get_package_name(manifest_path: &PathBuf) -> (String, Option<String>) {
         .expect("No name found in package information!")
         .to_owned();
     if table.contains_key("bin") {
-        let binary_table = table["bin"].as_array().expect("'bin' is not an array!").get(0).expect("'bin' contains no values!").as_table().expect("'bin' is not a table!");
+        let binary_table = table["bin"]
+            .as_array()
+            .expect("'bin' is not an array!")
+            .get(0)
+            .expect("'bin' contains no values!")
+            .as_table()
+            .expect("'bin' is not a table!");
         let binary_name = binary_table["name"]
             .as_str()
             .expect("No name found in binary information!")
@@ -320,8 +326,13 @@ impl rustc_driver::Callbacks for AnalysisCallback {
         queries.global_ctxt().unwrap().enter(|context| {
             println!("Analyzing output...");
             // Analyze the program using the type context
-            let graph = analysis::analyze(context, self.1);
-            let dot = graph.to_dot();
+            let (call_graph, chain_graph) = analysis::analyze(context);
+
+            let dot = if self.1 {
+                call_graph.to_dot()
+            } else {
+                chain_graph.to_dot()
+            };
 
             println!("Writing graph...");
 
