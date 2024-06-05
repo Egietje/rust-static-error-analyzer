@@ -120,12 +120,18 @@ fn get_function_calls_in_block(
     // If the block has an ending expression add calls from there
     // If this block is that of a function, this is a return statement
     if let Some(exp) = block.expr {
-        if is_fn {
-            for (kind, id, add_edge, _) in get_function_calls_in_expression(context, exp) {
-                res.push((kind, id, add_edge, true));
+        if let ExprKind::DropTemps(ex) = exp.kind {
+            if let ExprKind::Block(b, _lbl) = ex.kind {
+                return get_function_calls_in_block(context, b, is_fn);
             }
         } else {
-            res.extend(get_function_calls_in_expression(context, exp));
+            if is_fn {
+                for (kind, id, add_edge, _) in get_function_calls_in_expression(context, exp) {
+                    res.push((kind.clone(), id, add_edge, true));
+                }
+            } else {
+                res.extend(get_function_calls_in_expression(context, exp));
+            }
         }
     }
 

@@ -1,4 +1,4 @@
-use dot::{Edges, Kind, LabelText, Nodes, Style};
+use dot::{Edges, Id, Kind, LabelText, Nodes, Style};
 use rustc_hir::def_id::DefId;
 use rustc_hir::HirId;
 use std::borrow::Cow;
@@ -8,7 +8,7 @@ use std::cmp::PartialEq;
 pub struct Graph {
     pub nodes: Vec<Node>,
     pub edges: Vec<Edge>,
-    crate_name: String,
+    pub crate_name: String,
 }
 
 #[derive(Debug, Clone)]
@@ -114,6 +114,73 @@ impl<'a> dot::GraphWalk<'a, Node, Edge> for Graph {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ChainGraph {
+    pub nodes: Vec<ChainNode>,
+    pub edges: Vec<ChainEdge>,
+    pub crate_name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChainNode {
+    id: usize,
+    label: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChainEdge {
+    from: usize,
+    to: usize,
+    label: Option<String>,
+}
+
+impl<'a> dot::Labeller<'a, ChainNode, ChainEdge> for ChainGraph {
+    fn graph_id(&'a self) -> Id<'a> {
+        let mut name: String = self.crate_name.clone();
+        name.retain(|e| e.is_ascii_alphanumeric() || e == '_');
+        Id::new(format!("error_propagation_{name}_chains")).unwrap()
+    }
+
+    fn node_id(&'a self, n: &ChainNode) -> Id<'a> {
+        Id::new(format!("n{:?}", n.id)).unwrap()
+    }
+
+    fn node_label(&self, n: &ChainNode) -> LabelText<'a> {
+        LabelText::label(n.label.clone())
+    }
+
+    fn edge_label(&self, e: &ChainEdge) -> LabelText<'a> {
+        LabelText::label(e.label.clone().unwrap_or(String::from("unknown")))
+    }
+}
+
+impl<'a> dot::GraphWalk<'a, ChainNode, ChainEdge> for ChainGraph {
+    fn nodes(&'a self) -> Nodes<'a, ChainNode> {
+        let mut nodes = vec![];
+        for edge in &self.edges {
+            if !nodes.contains(&self.nodes[edge.from]) {
+                nodes.push(self.nodes[edge.from].clone());
+            }
+            if !nodes.contains(&self.nodes[edge.to]) {
+                nodes.push(self.nodes[edge.to].clone());
+            }
+        }
+        Cow::Owned(nodes)
+    }
+
+    fn edges(&'a self) -> Edges<'a, ChainEdge> {
+        Cow::Owned(self.edges.clone())
+    }
+
+    fn source(&'a self, edge: &ChainEdge) -> ChainNode {
+        self.nodes[edge.from].clone()
+    }
+
+    fn target(&'a self, edge: &ChainEdge) -> ChainNode {
+        self.nodes[edge.to].clone()
+    }
+}
+
 impl Graph {
     /// Create a new, empty graph.
     pub fn new(crate_name: String) -> Self {
@@ -161,6 +228,18 @@ impl Graph {
         }
 
         None
+    }
+
+    pub fn get_incoming_edges(&self, node_id: usize) -> Vec<Edge> {
+        let mut res = vec![];
+
+        for edge in &self.edges {
+            if edge.to == node_id {
+                res.push(edge.clone());
+            }
+        }
+
+        res
     }
 
     /// Convert this graph to dot representation.
@@ -243,6 +322,18 @@ impl PartialEq for NodeKind {
 }
 
 impl PartialEq for Edge {
+    fn eq(&self, other: &Self) -> bool {
+        self.to == other.to && self.from == other.from
+    }
+}
+
+impl PartialEq for ChainNode {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl PartialEq for ChainEdge {
     fn eq(&self, other: &Self) -> bool {
         self.to == other.to && self.from == other.from
     }
