@@ -120,7 +120,6 @@ fn get_function_calls_in_block(
     // If the block has an ending expression add calls from there
     // If this block is that of a function, this is a return statement
     if let Some(exp) = block.expr {
-
         if is_fn {
             for (kind, id, add_edge, _) in get_function_calls_in_expression(context, exp) {
                 res.push((kind, id, add_edge, true));
@@ -228,7 +227,11 @@ fn get_function_calls_in_expression(
         }
         ExprKind::ConstBlock(block) => {
             let node = context.hir_node(block.hir_id);
-            res.extend(get_function_calls_in_block(context, node.expect_block(), false));
+            res.extend(get_function_calls_in_block(
+                context,
+                node.expect_block(),
+                false,
+            ));
         }
         ExprKind::Array(args) | ExprKind::Tup(args) => {
             for exp in args {

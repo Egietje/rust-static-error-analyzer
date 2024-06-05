@@ -89,13 +89,13 @@ fn get_manifest_path(cargo_path: &str) -> PathBuf {
 fn get_compiler_args(relative_manifest_path: &str, manifest_path: &PathBuf) -> Option<Vec<String>> {
     println!("Using {}!", cargo_version().trim_end_matches('\n'));
 
-    let package_name = get_package_name(manifest_path);
+    let (package_name, bin_name) = get_package_name(manifest_path);
 
     cargo_clean(manifest_path, &package_name);
 
     let build_output = cargo_build_verbose(manifest_path);
 
-    let command = get_rustc_invocation(&build_output, &package_name)?;
+    let command = get_rustc_invocation(&build_output, &package_name, bin_name)?;
 
     Some(split_args(relative_manifest_path, &command))
 }
@@ -191,7 +191,7 @@ fn cargo_clean(manifest_path: &PathBuf, package_name: &str) -> String {
 }
 
 /// Extract the package name from the given manifest.
-fn get_package_name(manifest_path: &PathBuf) -> String {
+fn get_package_name(manifest_path: &PathBuf) -> (String, Option<String>) {
     let file = std::fs::read(manifest_path).expect("Could not read manifest!");
     let content = String::from_utf8(file).expect("Invalid UTF8!");
     let table = content
@@ -199,12 +199,21 @@ fn get_package_name(manifest_path: &PathBuf) -> String {
         .expect("Could not parse manifest as TOML!");
     let package_table = table["package"]
         .as_table()
-        .expect("No package info found in manifest!");
+        .expect("'package' is not a table!");
     let package_name = package_table["name"]
         .as_str()
         .expect("No name found in package information!")
         .to_owned();
-    package_name
+    if table.contains_key("bin") {
+        let binary_table = table["bin"].as_array().expect("'bin' is not an array!").get(0).expect("'bin' contains no values!").as_table().expect("'bin' is not a table!");
+        let binary_name = binary_table["name"]
+            .as_str()
+            .expect("No name found in binary information!")
+            .to_owned();
+        return (package_name, Some(binary_name));
+    }
+
+    (package_name, None)
 }
 
 /// Create a new cargo command.
@@ -258,13 +267,20 @@ fn cargo_build_verbose(manifest_path: &Path) -> String {
 }
 
 /// Gets the rustc invocation command from the output of `cargo build -vv`.
-fn get_rustc_invocation(build_output: &str, package_name: &str) -> Option<String> {
+fn get_rustc_invocation(
+    build_output: &str,
+    package_name: &str,
+    bin_name: Option<String>,
+) -> Option<String> {
+    let name = bin_name.unwrap_or(package_name.to_owned());
     for line in build_output.split('\n') {
         for part in line.split('`') {
             for command in part.split("&& ") {
                 if command.contains("rustc")
                     && command.contains("--crate-type bin")
-                    && command.contains(&format!("--crate-name {}", package_name.replace('-', "_")))
+                    && !command.contains("build.rs")
+                    && command.contains("main.rs")
+                    && command.contains(&format!("--crate-name {name}"))
                 {
                     return Some(String::from(command));
                 }
