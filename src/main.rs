@@ -61,17 +61,17 @@ fn main() {
 fn extract_arguments(args: &[String]) -> (String, String, bool) {
     if args.len() < 3 {
         eprintln!("Usage:");
-        eprintln!("static-result-analyzer.exe input output [keep]");
+        eprintln!("static-result-analyzer.exe input output [--call]");
         eprintln!();
         eprintln!("Both the input and output path should be relative.");
-        eprintln!("The keep flag will keep all nodes/edges in the graph, effectively outputting a call graph. If not set, non-error calls are removed.");
+        eprintln!("The call flag will output the call graph instead of the error chain graph if set.");
         std::process::exit(rustc_driver::EXIT_FAILURE);
     }
 
     (
         args.get(1).unwrap().clone(),
         args.get(2).unwrap().clone(),
-        !args.get(3).is_some_and(|arg| arg == "keep"),
+        !args.get(3).is_some_and(|arg| arg == "--call"),
     )
 }
 
@@ -329,9 +329,9 @@ impl rustc_driver::Callbacks for AnalysisCallback {
             let (call_graph, chain_graph) = analysis::analyze(context);
 
             let dot = if self.1 {
-                call_graph.to_dot()
-            } else {
                 chain_graph.to_dot()
+            } else {
+                call_graph.to_dot()
             };
 
             println!("Writing graph...");

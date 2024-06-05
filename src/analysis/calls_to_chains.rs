@@ -1,10 +1,10 @@
-use crate::graph::{ChainGraph, Edge, Graph};
+use crate::graph::{ChainGraph, CallEdge, CallGraph};
 
-pub fn format(graph: &Graph) -> ChainGraph {
+pub fn format(graph: &CallGraph) -> ChainGraph {
     split_chains(graph)
 }
 
-fn split_chains(graph: &Graph) -> ChainGraph {
+fn split_chains(graph: &CallGraph) -> ChainGraph {
     let mut new_graph = ChainGraph::new(graph.crate_name.clone());
 
     // Loop over all nodes (e.g. functions)
@@ -25,8 +25,8 @@ fn split_chains(graph: &Graph) -> ChainGraph {
     new_graph
 }
 
-fn find_chains(graph: &Graph, start_edge: &Edge) -> Vec<Vec<Edge>> {
-    let mut res: Vec<Vec<Edge>> = vec![];
+fn find_chains(graph: &CallGraph, start_edge: &CallEdge) -> Vec<Vec<CallEdge>> {
+    let mut res: Vec<Vec<CallEdge>> = vec![];
 
     for edge in graph.get_outgoing_edges(start_edge.to) {
         if edge.is_error && edge.propagates {

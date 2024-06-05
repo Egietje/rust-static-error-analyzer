@@ -1,8 +1,8 @@
 mod create_graph;
-mod format_graph;
+mod calls_to_chains;
 mod types;
 
-use crate::graph::{ChainGraph, Graph};
+use crate::graph::{ChainGraph, CallGraph};
 use rustc_middle::ty::TyCtxt;
 
 /// Analysis steps:
@@ -20,30 +20,29 @@ use rustc_middle::ty::TyCtxt;
 /// NOTE: skipped due to lack of time
 ///
 /// Step 4: Parse the output graph to show individual propagation chains
-pub fn analyze(context: TyCtxt) -> (Graph, ChainGraph) {
+pub fn analyze(context: TyCtxt) -> (CallGraph, ChainGraph) {
     // Get the entry point of the program
     let entry_node = get_entry_node(context);
 
     // Create call graph
-    let mut graph = create_graph::create_call_graph_from_root(context, entry_node.expect_item());
+    let mut call_graph = create_graph::create_call_graph_from_root(context, entry_node.expect_item());
 
     // Attach return type info
-    for edge in &mut graph.edges {
+    for edge in &mut call_graph.edges {
         let (ty, error) = types::get_error_or_type(
             context,
             edge.call_id,
-            graph.nodes[edge.from].kind.def_id(),
-            graph.nodes[edge.to].kind.def_id(),
+            call_graph.nodes[edge.from].kind.def_id(),
+            call_graph.nodes[edge.to].kind.def_id(),
         );
         edge.ty = Some(ty);
         edge.is_error = error;
     }
 
-    // Format graph
-    let formatted = format_graph::format(&graph);
-    println!("{}", formatted.to_dot());
+    // Parse graph to show chains
+    let chain_graph = calls_to_chains::format(&call_graph);
 
-    (graph, formatted)
+    (call_graph, chain_graph)
 }
 
 /// Retrieve the entry node (aka main function) from the type context.

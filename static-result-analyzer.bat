@@ -50,32 +50,32 @@ set /p input=Enter relative path to the manifest of the project you want to anal
 set output=graph.dot
 set /p output=Enter relative path to the output file of the graph (default - %output%): 
 
-set keep=
+set call=
 
 
-:ask_keep
-set should_keep=n
-set /p should_keep=Keep nodes/edges in graph that aren't error related? [Y/n] (default - %should_keep%): 
+:ask_call
+set should_call=n
+set /p should_call=Output the call graph instead of propagation chain graph? [Y/n] (default - %should_call%): 
 
-if %should_keep% == Y ( goto set_keep )
-if %should_keep% == y ( goto set_keep )
+if %should_call% == Y ( goto set_call )
+if %should_call% == y ( goto set_call )
 
-if %should_keep% == N ( goto after_keep )
-if %should_keep% == n ( goto after_keep )
-
-
-:set_keep
-set keep=keep
-goto after_keep
+if %should_call% == N ( goto after_call )
+if %should_call% == n ( goto after_call )
 
 
+:set_call
+set call=--call
+goto after_call
 
-:after_keep
+
+
+:after_call
 :: Run the analyzer
 echo Building and running analyzer!
 
 cd static-result-analyzer
-cargo +%toolchain% run -- ../%input% ../%output% %keep%
+cargo +%toolchain% run -- ../%input% ../%output% %call%
 
 
 :: Check whether the toolchain was installed specifically for this, and ask whether to remove it again if it was

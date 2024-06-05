@@ -21,4 +21,5 @@ async fn other() {
 
 }
 
+#[derive(Debug)]
 struct MyError;
