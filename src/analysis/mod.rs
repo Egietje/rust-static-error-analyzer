@@ -52,8 +52,9 @@ pub fn analyze(context: TyCtxt, remove_redundant: bool) -> Graph {
     }
 
     // Format graph
-    if !remove_redundant {
-        graph = format_graph::format(graph);
+    if remove_redundant {
+        let formatted = format_graph::format(&graph);
+        println!("{}", formatted.to_dot());
     }
 
     graph

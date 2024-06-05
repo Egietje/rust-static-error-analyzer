@@ -14,7 +14,7 @@ pub struct Graph {
 #[derive(Debug, Clone)]
 pub struct Node {
     id: usize,
-    label: String,
+    pub label: String,
     pub kind: NodeKind,
     pub panics: bool,
 }
@@ -36,14 +36,14 @@ pub struct Edge {
 }
 
 impl<'a> dot::Labeller<'a, Node, Edge> for Graph {
-    fn graph_id(&self) -> dot::Id<'a> {
+    fn graph_id(&self) -> Id<'a> {
         let mut name: String = self.crate_name.clone();
         name.retain(|e| e.is_ascii_alphanumeric() || e == '_');
-        dot::Id::new(format!("error_propagation_{name}")).unwrap()
+        Id::new(format!("error_propagation_{name}")).unwrap()
     }
 
-    fn node_id(&self, n: &Node) -> dot::Id<'a> {
-        dot::Id::new(format!("n{:?}", n.id)).unwrap()
+    fn node_id(&self, n: &Node) -> Id<'a> {
+        Id::new(format!("n{:?}", n.id)).unwrap()
     }
 
     fn node_label(&self, n: &Node) -> LabelText<'a> {
@@ -230,12 +230,12 @@ impl Graph {
         None
     }
 
-    pub fn get_incoming_edges(&self, node_id: usize) -> Vec<Edge> {
+    pub fn get_outgoing_edges(&self, node_id: usize) -> Vec<&Edge> {
         let mut res = vec![];
 
         for edge in &self.edges {
-            if edge.to == node_id {
-                res.push(edge.clone());
+            if edge.from == node_id {
+                res.push(edge);
             }
         }
 
@@ -324,6 +324,59 @@ impl PartialEq for NodeKind {
 impl PartialEq for Edge {
     fn eq(&self, other: &Self) -> bool {
         self.to == other.to && self.from == other.from
+    }
+}
+
+impl ChainGraph {
+    /// Create a new, empty graph.
+    pub fn new(crate_name: String) -> Self {
+        ChainGraph {
+            nodes: Vec::new(),
+            edges: Vec::new(),
+            crate_name,
+        }
+    }
+
+    pub fn add_node(&mut self, label: String) -> usize {
+        let id = self.nodes.len();
+
+        self.nodes.push(ChainNode::new(id, label));
+
+        id
+    }
+
+    pub fn add_edge(&mut self, from: usize, to: usize, label: Option<String>) {
+        self.edges.push(ChainEdge::new(from, to, label));
+    }
+
+    /// Convert this graph to dot representation.
+    pub fn to_dot(&self) -> String {
+        let mut buf = Vec::new();
+
+        dot::render(self, &mut buf).unwrap();
+
+        String::from_utf8(buf).unwrap()
+    }
+}
+
+impl ChainNode {
+    /// Create a new node.
+    fn new(id: usize, label: String) -> Self {
+        ChainNode {
+            id,
+            label,
+        }
+    }
+}
+
+impl ChainEdge {
+    /// Create a new edge.
+    pub fn new(from: usize, to: usize, label: Option<String>) -> Self {
+        ChainEdge {
+            from,
+            to,
+            label,
+        }
     }
 }
 
