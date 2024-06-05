@@ -1,4 +1,5 @@
 mod create_graph;
+mod format_graph;
 mod types;
 
 use crate::graph::Graph;
@@ -15,11 +16,12 @@ use rustc_middle::ty::TyCtxt;
 /// Step 2.1: Loop over each edge in call graph
 /// Step 2.2: Label edge with type info extracted from MIR
 ///
-/// Step 3: TODO: Attach panic info to functions in call graph
+/// Step 3: Attach panic info to functions in call graph
+/// NOTE: skipped due to lack of time
 ///
 /// Step 4: Remove functions that don't error/panic from graph
 ///
-/// Step 5: TODO Format the output graph to show individual propagation chains
+/// Step 5: Format the output graph to show individual propagation chains
 pub fn analyze(context: TyCtxt, remove_redundant: bool) -> Graph {
     // Get the entry point of the program
     let entry_node = get_entry_node(context);
@@ -39,8 +41,6 @@ pub fn analyze(context: TyCtxt, remove_redundant: bool) -> Graph {
         edge.is_error = error;
     }
 
-    // TODO: Attach panic info
-
     // Remove redundant nodes/edges
     if remove_redundant {
         for i in (0..graph.edges.len()).rev() {
@@ -51,7 +51,10 @@ pub fn analyze(context: TyCtxt, remove_redundant: bool) -> Graph {
         }
     }
 
-    // TODO: Format output graph
+    // Format graph
+    if !remove_redundant {
+        graph = format_graph::format(graph);
+    }
 
     graph
 }
