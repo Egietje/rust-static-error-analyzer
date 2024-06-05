@@ -127,7 +127,7 @@ fn get_function_calls_in_block(
         } else {
             if is_fn {
                 for (kind, id, add_edge, _) in get_function_calls_in_expression(context, exp) {
-                    res.push((kind.clone(), id, add_edge, true));
+                    res.push((kind, id, add_edge, true));
                 }
             } else {
                 res.extend(get_function_calls_in_expression(context, exp));
