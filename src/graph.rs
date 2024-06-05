@@ -173,11 +173,11 @@ impl<'a> dot::GraphWalk<'a, ChainNode, ChainEdge> for ChainGraph {
     }
 
     fn source(&'a self, edge: &ChainEdge) -> ChainNode {
-        self.nodes[edge.from].clone()
+        self.nodes[edge.to].clone()
     }
 
     fn target(&'a self, edge: &ChainEdge) -> ChainNode {
-        self.nodes[edge.to].clone()
+        self.nodes[edge.from].clone()
     }
 }
 
