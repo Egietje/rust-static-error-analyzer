@@ -89,11 +89,13 @@ fn get_manifest_path(cargo_path: &str) -> PathBuf {
 fn get_compiler_args(relative_manifest_path: &str, manifest_path: &PathBuf) -> Option<Vec<String>> {
     println!("Using {}!", cargo_version().trim_end_matches('\n'));
 
-    cargo_clean(manifest_path);
+    let package_name = get_package_name(manifest_path);
+
+    cargo_clean(manifest_path, &package_name);
 
     let build_output = cargo_build_verbose(manifest_path);
 
-    let command = get_rustc_invocation(&build_output)?;
+    let command = get_rustc_invocation(&build_output, &package_name)?;
 
     Some(split_args(relative_manifest_path, &command))
 }
@@ -163,12 +165,12 @@ fn split_args(relative_manifest_path: &str, command: &str) -> Vec<String> {
 }
 
 /// Run `cargo clean -p PACKAGE`, where the package name is extracted from the given manifest.
-fn cargo_clean(manifest_path: &PathBuf) -> String {
+fn cargo_clean(manifest_path: &PathBuf, package_name: &str) -> String {
     println!("Cleaning package...");
     let mut clean_command = create_cargo_command();
     clean_command.arg("clean");
     clean_command.arg("-p");
-    clean_command.arg(get_package_name(manifest_path));
+    clean_command.arg(package_name);
 
     clean_command.current_dir(
         manifest_path
@@ -256,12 +258,13 @@ fn cargo_build_verbose(manifest_path: &Path) -> String {
 }
 
 /// Gets the rustc invocation command from the output of `cargo build -vv`.
-fn get_rustc_invocation(build_output: &str) -> Option<String> {
+fn get_rustc_invocation(build_output: &str, package_name: &str) -> Option<String> {
     for line in build_output.split('\n') {
         for part in line.split('`') {
             for command in part.split("&& ") {
                 if command.contains("rustc")
                     && command.contains("--crate-type bin")
+                    && command.contains(&format!("--crate-name {}", package_name.replace('-', "_")))
                     && command.contains("main.rs")
                 {
                     return Some(String::from(command));
