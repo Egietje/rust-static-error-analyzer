@@ -7,7 +7,7 @@ pub fn to_chains(graph: &CallGraph) -> ChainGraph {
     let mut count: usize = 0;
     let mut max_size: usize = 0;
     let mut total_size: usize = 0;
-    // Loop over all nodes (e.g. functions)
+    // Loop over all edges (e.g. function calls)
     for edge in &graph.edges {
         // Start of a chain
         if edge.is_error && !edge.propagates {
