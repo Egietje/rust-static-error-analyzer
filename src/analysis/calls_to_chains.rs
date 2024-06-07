@@ -7,20 +7,24 @@ pub fn to_chains(graph: &CallGraph) -> ChainGraph {
     let mut count: usize = 0;
     let mut max_size: usize = 0;
     let mut total_size: usize = 0;
+    let mut max_depth: usize = 0;
     // Loop over all edges (e.g. function calls)
     for edge in &graph.edges {
         // Start of a chain
         if edge.is_error && !edge.propagates {
             let mut node_map: HashMap<usize, usize> = HashMap::new();
 
-            let mut calls = get_chain_from_edge(graph, edge, &mut vec![]);
+            let (mut calls, depth) = get_chain_from_edge(graph, edge, &mut vec![], 1);
             calls.push(edge.clone());
 
             count += 1;
-            let len = calls.len();
-            total_size += len;
-            if len > max_size {
-                max_size = len;
+            let size = calls.len();
+            total_size += size;
+            if size > max_size {
+                max_size = size;
+            }
+            if depth > max_depth {
+                max_depth = depth;
             }
 
             for call in calls {
@@ -52,14 +56,16 @@ pub fn to_chains(graph: &CallGraph) -> ChainGraph {
     println!();
     println!("There are {count} error propagation chains in this program.");
     println!("The biggest chain consists of {max_size} function calls.");
-    println!("The average chain length is {average_size}.");
+    println!("The longest error path consists of {max_depth} chained function calls.");
+    println!("The average chain consists of {average_size} function calls.");
     println!();
 
     new_graph
 }
 
-fn get_chain_from_edge(graph: &CallGraph, from: &CallEdge, explored: &mut Vec<usize>) -> Vec<CallEdge> {
+fn get_chain_from_edge(graph: &CallGraph, from: &CallEdge, explored: &mut Vec<usize>, depth: usize) -> (Vec<CallEdge>, usize) {
     let mut res = vec![];
+    let mut max_depth = depth;
 
     explored.push(from.to);
 
@@ -70,7 +76,12 @@ fn get_chain_from_edge(graph: &CallGraph, from: &CallEdge, explored: &mut Vec<us
             if !explored.contains(&edge.to) && !res.contains(edge) && edge != from {
                 // If we haven't had this edge yet, explore the node
                 res.push(edge.clone());
-                res.extend(get_chain_from_edge(graph, edge, explored));
+
+                let (chain, d) = get_chain_from_edge(graph, edge, explored, depth + 1);
+                if d > max_depth {
+                    max_depth = d;
+                }
+                res.extend(chain);
             } else {
                 // Otherwise just add the edge
                 res.push(edge.clone());
@@ -78,5 +89,5 @@ fn get_chain_from_edge(graph: &CallGraph, from: &CallEdge, explored: &mut Vec<us
         }
     }
 
-    res
+    (res, max_depth)
 }
