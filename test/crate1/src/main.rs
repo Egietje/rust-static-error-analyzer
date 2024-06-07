@@ -1,21 +1,13 @@
-fn main() -> Result<(), MyError> {
+fn main() {
+    other();
+}
+
+fn result() -> Result<(), MyError> {
     other()
 }
 
-async fn result() -> Result<(), MyError> {
-    Ok(())
-}
-
-async fn propagate() -> Result<(), MyError> {
-    result().await?;
-
-    result().await;
-
-    return result().await;
-}
-
 fn other() -> Result<(), MyError> {
-    main()
+    result()
 }
 
 #[derive(Debug)]

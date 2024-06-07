@@ -13,7 +13,7 @@ pub fn to_chains(graph: &CallGraph) -> ChainGraph {
         if edge.is_error && !edge.propagates {
             let mut node_map: HashMap<usize, usize> = HashMap::new();
 
-            let mut calls = get_chain_from_edge(graph, edge);
+            let mut calls = get_chain_from_edge(graph, edge, &mut vec![]);
             calls.push(edge.clone());
 
             count += 1;
@@ -58,17 +58,19 @@ pub fn to_chains(graph: &CallGraph) -> ChainGraph {
     new_graph
 }
 
-fn get_chain_from_edge(graph: &CallGraph, from: &CallEdge) -> Vec<CallEdge> {
-    let mut res: Vec<CallEdge> = vec![];
+fn get_chain_from_edge(graph: &CallGraph, from: &CallEdge, explored: &mut Vec<usize>) -> Vec<CallEdge> {
+    let mut res = vec![];
+
+    explored.push(from.to);
 
     // Add all outgoing propagating error edges from the 'to' node to the list
     // And do the same once for each node this edge calls to
     for edge in graph.get_outgoing_edges(from.to) {
         if edge.is_error && edge.propagates {
-            if !res.contains(edge) {
+            if !explored.contains(&edge.to) && !res.contains(edge) && edge != from {
                 // If we haven't had this edge yet, explore the node
                 res.push(edge.clone());
-                res.extend(get_chain_from_edge(graph, edge));
+                res.extend(get_chain_from_edge(graph, edge, explored));
             } else {
                 // Otherwise just add the edge
                 res.push(edge.clone());
