@@ -1,8 +1,5 @@
-fn main() {
-    async {
-        let x = propagate().await;
-        other().await;
-    };
+fn main() -> Result<(), MyError> {
+    other()
 }
 
 async fn result() -> Result<(), MyError> {
@@ -17,8 +14,8 @@ async fn propagate() -> Result<(), MyError> {
     return result().await;
 }
 
-async fn other() {
-
+fn other() -> Result<(), MyError> {
+    main()
 }
 
 #[derive(Debug)]

@@ -4,6 +4,9 @@ use std::collections::HashMap;
 pub fn to_chains(graph: &CallGraph) -> ChainGraph {
     let mut new_graph = ChainGraph::new(graph.crate_name.clone());
 
+    let mut count: usize = 0;
+    let mut max_size: usize = 0;
+    let mut total_size: usize = 0;
     // Loop over all nodes (e.g. functions)
     for edge in &graph.edges {
         // Start of a chain
@@ -12,6 +15,13 @@ pub fn to_chains(graph: &CallGraph) -> ChainGraph {
 
             let mut calls = get_chain_from_edge(graph, edge);
             calls.push(edge.clone());
+
+            count += 1;
+            let len = calls.len();
+            total_size += len;
+            if len > max_size {
+                max_size = len;
+            }
 
             for call in calls {
                 // If we've already added the node to the new graph, refer to that, otherwise, add a new node
@@ -37,6 +47,13 @@ pub fn to_chains(graph: &CallGraph) -> ChainGraph {
             }
         }
     }
+    let average_size = (total_size as f64) / (count as f64);
+
+    println!();
+    println!("There are {count} error propagation chains in this program.");
+    println!("The biggest chain consists of {max_size} function calls.");
+    println!("The average chain length is {average_size}.");
+    println!();
 
     new_graph
 }

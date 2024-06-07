@@ -1,5 +1,3 @@
-cd ..
-
 @echo off
 
 echo Result Analysis Tool by Thomas Kas
@@ -74,8 +72,7 @@ goto after_call
 :: Run the analyzer
 echo Building and running analyzer!
 
-cd static-result-analyzer
-cargo +%toolchain% run -- ../%input% ../%output% %call%
+cargo +%toolchain% run -- %input% %output% %call%
 
 
 :: Check whether the toolchain was installed specifically for this, and ask whether to remove it again if it was
