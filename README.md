@@ -1,4 +1,4 @@
-# Static Analyser of Error Propagation for Rust
+# Static Analyzer of Error Propagation for Rust
 
 By Thomas Kas
 
@@ -10,5 +10,5 @@ By Thomas Kas
 
 Because of its usage of internal Rustc features, the program could not be compiled to an executable.
 It can instead be run using the batch file (Windows-only), which installs the correct toolchain and dependencies and runs the project.
-Also, it allows you to input the 
+This batch file asks you what program you want to analyze.
 
