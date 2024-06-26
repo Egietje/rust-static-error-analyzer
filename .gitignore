@@ -8,7 +8,7 @@
 rustc-ice-*.txt
 
 # Test crates
-test
+/test
 
 # Output graphs
 *.dot
