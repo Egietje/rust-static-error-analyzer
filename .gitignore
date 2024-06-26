@@ -5,3 +5,7 @@
 /.idea
 
 rustc-ice-*.txt
+
+test
+
+*.dot
