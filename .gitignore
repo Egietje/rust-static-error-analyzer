@@ -4,8 +4,11 @@
 # Project files
 /.idea
 
+# Rustc crash logs
 rustc-ice-*.txt
 
+# Test crates
 test
 
+# Output graphs
 *.dot
